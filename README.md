@@ -9,5 +9,6 @@
 
 
 ### My Co-work Agents
-- Deepseek-v4
+- Deepseek-v4-flash & pro
 - GPT-5.4 mini
+- GPT-5.4
