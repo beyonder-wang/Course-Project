@@ -18,46 +18,84 @@ SUSTech ML & MEA course project — EEG signal classification across 5 datasets 
 
 All preprocessed to 200 Hz, bandpass filtered 0.1–75 Hz. HDF5 files contain `X` (float32, shape N×C×T) and `y` (int64 labels). `test_x_only.h5` has only `X`.
 
+After running `prepare_folds.py`, each dataset gains `all.h5` (merged train+val), `folds_info.json`, and `fold_{k}/train_idx.npy` + `val_idx.npy`.
+
 ## Available Models
 
-All defined in `train.ipynb`:
-- **SimpleLinear** — flattened input → single linear layer (baseline)
-- **SimpleMLP** — flattened input → hidden layers with ReLU+Dropout
-- **EEGNet** — CNN with temporal/spatial/separable convolutions (standard EEG baseline)
-- **EEGGRU** (aliased from `ExerciseEEGSimpleRNN` in `RNN_Exercise.py`) — bidirectional SimpleRNN
-- **ExerciseEEGLSTM** (from `RNN_Exercise.py`) — bidirectional LSTM
+Defined in `model/` package:
+- **SimpleLinear** (`model/simple.py`) — flattened input → single linear layer (baseline)
+- **SimpleMLP** (`model/simple.py`) — flattened input → hidden layers with ReLU+Dropout
+- **EEGNet** (`model/eegnet.py`) — CNN with temporal/spatial/separable convolutions
+- **EEGGRU** (`model/rnn.py`) — bidirectional GRU
+- **EEGLSTM** (`model/rnn.py`) — bidirectional LSTM
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `train.ipynb` | Main pipeline: data loading, model definition, training loop, test inference |
-| `RNN_Exercise.py` | RNN/LSTM model definitions (originally a student exercise with blanks) |
-| `data/TEST_DATASET.py` | PyTorch Dataset classes for HDF5 data |
-| `train.py` | (empty) — intended for refactored training script |
-| `predict.py` | (empty) — intended for refactored prediction script |
-| `test_result/{DATA_NAME}.txt` | Output: one predicted label per line |
+| `0_run_train.py` | **CLI entry point** for training and test prediction |
+| `prepare_folds.py` | **Upstream**: merge train+val, generate stratified 5-fold CV splits |
+| `trainer.py` | `Trainer` class: training loop, validation, metric logging, prediction saving |
+| `utils.py` | `load_dataset_info()`, `create_dataloaders()` (supports original or fold split) |
+| `model/` | Package with model definitions (`__init__.py` exports `MODEL_DICT`) |
+| `data/TEST_DATASET.py` | PyTorch Dataset classes: `TrainDataset`, `FoldDataset`, `TestDataset` |
+| `train.ipynb` | Original Jupyter pipeline (deprecated in favor of CLI scripts) |
+| `RNN_Exercise.py` | Legacy RNN/LSTM definitions (superseded by `model/rnn.py`) |
+| `Results/{tag}/` | Per-run output: predictions.txt, model.pt, config.json, metrics.json |
 | `tmp_results.md` | Log of model accuracy comparisons |
-
-## Training Pipeline (in `train.ipynb`)
-
-1. Set `DATA_NAME` to select dataset (MDD, BCIC2A, CHINESE, SEED, SLEEP)
-2. Update `CHANNELS`, `CLASSES` to match dataset's `dataset_info.json`
-3. Select a model (uncomment the desired model line)
-4. Configure hyperparameters: `LR`, `EPOCHS`, `BATCH_SIZE`
-5. Run all cells → trains model, logs val accuracy, saves predictions to `test_result/{DATA_NAME}.txt`
 
 ## Quick Commands (run from repo root)
 
 ```bash
-# Train and predict — open and run train.ipynb in Jupyter / VS Code
-# No CLI entry point yet (train.py and predict.py are stubs)
+# 1. Prepare CV folds (once per dataset)
+python prepare_folds.py --dataset MDD
+
+# 2. Train and predict
+python 0_run_train.py --dataset MDD --model EEGNet --epochs 30 --lr 1e-3
+
+# 3. Single fold training
+python 0_run_train.py --dataset MDD --model EEGNet --epochs 30 --fold 1
+
+# 4. Auto-run all 5 folds with CV summary
+python 0_run_train.py --dataset MDD --model EEGNet --epochs 30 --fold -1
 
 # View dataset info
 python -c "import json; info=json.load(open('data/MDD/dataset_info.json')); print(info['dataset']['category_list'], len(info['dataset']['channels']))"
 
 # Check saved predictions
-cat test_result/MDD.txt | head -20
+cat Results/MDD*/predictions.txt | head -20
+```
+
+## `0_run_train.py` Reference
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--dataset` | MDD | Dataset name (MDD/BCIC2A/CHINESE/SEED/SLEEP) |
+| `--model` | EEGNet | Model architecture |
+| `--lr` | 5e-4 | Learning rate |
+| `--epochs` | 5 | Number of epochs |
+| `--batch_size` | 32 | Batch size |
+| `--fold` | (none) | CV fold 1-5, or -1 for all 5 folds |
+
+Each run creates an isolated `Results/{Dataset}_{Model}_{timestamp}/` dir:
+```
+Results/MDD_EEGNet_20260427_153025/
+├── config.json         # run configuration
+├── metrics.json        # final/best val accuracy + loss history
+├── predictions.txt     # test set predictions (one label per line)
+└── model.pt            # trained model state_dict
+```
+
+With `--fold -1`:
+```
+Results/MDD_EEGNet_20260427_..._allfolds/
+├── config.json
+├── cv_summary.json     # per-fold metrics + mean ± std
+├── fold_1/{...}
+├── fold_2/{...}
+├── fold_3/{...}
+├── fold_4/{...}
+└── fold_5/{...}
 ```
 
 ## Architecture Notes
@@ -65,8 +103,8 @@ cat test_result/MDD.txt | head -20
 - All models expect input shape `(B, C, T)` — batch × channels × time
 - RNN models transpose internally to `(B, T, C)` and use final hidden state for classification
 - Training loop runs on CPU (no CUDA setup currently)
-- Each dataset has different channel counts and class counts — must be configured per-dataset
-- The `CHANNELS` and `CLASSES` variables in cell 13 must match the target dataset
+- Each dataset has different channel counts and class counts — configured automatically via `dataset_info.json`
+- `--fold` requires `prepare_folds.py` to have been run first for that dataset
 
 ## Known Results (on MDD dataset)
 
