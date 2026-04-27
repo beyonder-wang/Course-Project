@@ -1,0 +1,49 @@
+{
+  "dataset": {
+    "name": "ChineseEEG_garnettdream",
+    "task_type": "reading_detection",
+    "downstream_task": "classification",
+    "num_labels": 2,
+    "category_list": [
+      "No-Reading",
+      "Reading"
+    ],
+    "original_sampling_rate": 1000.0,
+    "channels": [
+            "Fp1", "Fp2",
+            "F7", "F3", "Fz", "F4", "F8",
+            "T7", "C3", "Cz", "C4", "T8",
+            "P7", "P3", "Pz", "P4", "P8",
+            "O1", "Oz", "O2",
+            "FCz", "CPz"
+        ],
+    "montage": "GSN-HydroCel-128"
+  },
+  "processing": {
+    "target_sampling_rate": 200.0,
+    "window_sec": 1.0,
+    "stride_sec": 1.0,
+    "filter_low": 0.1,
+    "filter_high": 75.0,
+    "filter_notch": 50.0,
+    "max_amplitude_uv": 600.0,
+    "units_stored": "uV",
+    "notes": "Processed from ChineseEEG dataset (EGI 128). Aligned with MDD dataset attributes."
+  },
+  "segmentation": {
+    "policy": "greedy_non_overlapping_quota",
+    "window_sec": 1.0,
+    "stride_sec": "variable (greedy)",
+    "event_source": "VAD (Voice Activity Detection) majority vote",
+    "notes": "Max 40 segments per class per run."
+  },
+  "statistics": {
+    "total_subjects": 10,
+    "successful": 10,
+    "failed": 0,
+    "total_segments": 10723,
+    "valid_segments": 10723,
+    "rejected_segments": 0
+  },
+  "generated_at": "2026-01-29T16:05:41.542139"
+}

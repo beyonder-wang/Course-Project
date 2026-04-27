@@ -1,0 +1,32 @@
+{
+  "dataset": "BCIC2A",
+  "n_folds": 5,
+  "seed": 42,
+  "total_samples": 1080,
+  "shape": [
+    22,
+    800
+  ],
+  "folds": {
+    "1": {
+      "train": 864,
+      "val": 216
+    },
+    "2": {
+      "train": 864,
+      "val": 216
+    },
+    "3": {
+      "train": 864,
+      "val": 216
+    },
+    "4": {
+      "train": 864,
+      "val": 216
+    },
+    "5": {
+      "train": 864,
+      "val": 216
+    }
+  }
+}

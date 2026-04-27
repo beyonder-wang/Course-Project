@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 from model import MODEL_DICT
-from utils import load_dataset_info, create_dataloaders
+from utils import load_dataset_info, create_dataloaders, resolve_device
 from trainer import Trainer
 
 
@@ -55,6 +55,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         test_loader=test_loader,
         lr=args.lr,
         epochs=args.epochs,
+        device=args.device,
     )
 
     history = trainer.train()
@@ -101,8 +102,11 @@ def main():
         help="CV fold (1-5), -1 for all 5 folds (requires prepare_folds.py). "
              "Omit to use original train/val split.",
     )
+    parser.add_argument("--device", type=str, default="cpu",
+                        help="Device: cpu, cuda, cuda:0, etc. (auto-fallback to CPU)")
 
     args = parser.parse_args()
+    args.device = resolve_device(args.device)
 
     # --- Validate fold ---
     if args.fold is not None and args.fold not in (-1, 1, 2, 3, 4, 5):
@@ -133,6 +137,7 @@ def main():
     print(f"=== Dataset: {args.dataset} ===")
     print(f"Channels: {channels}, Classes: {num_classes}, Time points: {time_points}")
     print(f"Model: {args.model} | LR: {args.lr} | Epochs: {args.epochs} | Batch: {args.batch_size}")
+    print(f"Device: {args.device}")
     print("-" * 40)
 
     if args.fold == -1:

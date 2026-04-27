@@ -1,0 +1,66 @@
+{
+  "dataset": {
+    "name": "BCIC2A_4class",
+    "description": "BCI Competition IV Dataset 2a: Motor Imagery",
+    "task_type": "motor_imaginary",
+    "downstream_task": "classification",
+    "num_labels": 4,
+    "category_list": [
+      "left",
+      "right",
+      "foot",
+      "tongue"
+    ],
+    "original_sampling_rate": 250.0,
+    "channels": [
+      "FZ",
+      "FC3",
+      "FC1",
+      "FCZ",
+      "FC2",
+      "FC4",
+      "C5",
+      "C3",
+      "C1",
+      "CZ",
+      "C2",
+      "C4",
+      "C6",
+      "CP3",
+      "CP1",
+      "CPZ",
+      "CP2",
+      "CP4",
+      "P1",
+      "PZ",
+      "P2",
+      "POZ"
+    ],
+    "montage": "10_20",
+    "source_url": "https://www.bbci.de/competition/iv/",
+    "num_subjects": 9,
+    "num_sessions_per_subject": 2,
+    "num_runs_per_session": 6,
+    "num_trials_per_run": 48
+  },
+  "processing": {
+    "target_sampling_rate": 200.0,
+    "window_sec": 1.0,
+    "stride_sec": 1.0,
+    "filter_low": 0.1,
+    "filter_high": 75.0,
+    "filter_notch": 50.0,
+    "file_format": "mat",
+    "max_amplitude_uv": 600.0
+  },
+  "statistics": {
+    "total_subjects": 9,
+    "successful_subjects": 9,
+    "failed_subjects": [],
+    "rejection_rate": "0.0%",
+    "rejected_segments": 0,
+    "valid_segments": 5184,
+    "total_segments": 5184
+  },
+  "generated_at": "2026-01-23T18:20:53.343463"
+}

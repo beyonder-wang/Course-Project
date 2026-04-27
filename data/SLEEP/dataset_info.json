@@ -1,0 +1,54 @@
+{
+    "dataset": {
+        "name": "ISRUC-SLEEP",
+        "task_type": "sleep_staging",
+        "downstream_task": "classification",
+        "num_labels": 5,
+        "category_list": [
+            "Wake",
+            "N1",
+            "N2",
+            "N3",
+            "REM"
+        ],
+        "original_sampling_rate": 200.0,
+        "channels": [
+            "C3_A2",
+            "C4_A1",
+            "F3_A2",
+            "F4_A1",
+            "O1_A2",
+            "O2_A1"
+        ],
+        "montage": "standard_1020"
+    },
+    "processing": {
+        "target_sampling_rate": 200.0,
+        "window_sec": 30.0,
+        "stride_sec": 30.0,
+        "filter_low": 0.3,
+        "filter_high": 35.0,
+        "filter_notch": 50.0,
+        "filter_order": 4,
+        "max_amplitude_uv": null,
+        "skip_corrupt": true,
+        "robust_clamp_uv": null
+    },
+    "statistics": {
+        "total_subjects": 100,
+        "successful": 100,
+        "failed": 0,
+        "failed_subject_ids": [],
+        "total_segments": 87187,
+        "valid_segments": 87187,
+        "rejected_segments": 0,
+        "label_counts": {
+            "0": 20098,
+            "1": 11062,
+            "2": 27511,
+            "3": 17251,
+            "4": 11265
+        }
+    },
+    "generated_at": "2026-01-18T20:13:49.041009"
+}
