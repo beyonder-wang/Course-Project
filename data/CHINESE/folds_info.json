@@ -1,0 +1,32 @@
+{
+  "dataset": "CHINESE",
+  "n_folds": 5,
+  "seed": 42,
+  "total_samples": 600,
+  "shape": [
+    22,
+    200
+  ],
+  "folds": {
+    "1": {
+      "train": 480,
+      "val": 120
+    },
+    "2": {
+      "train": 480,
+      "val": 120
+    },
+    "3": {
+      "train": 480,
+      "val": 120
+    },
+    "4": {
+      "train": 480,
+      "val": 120
+    },
+    "5": {
+      "train": 480,
+      "val": 120
+    }
+  }
+}

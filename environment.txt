@@ -1,0 +1,12 @@
+# Python 3.13.13 (conda)
+
+# Core runtime for training, validation, and test prediction
+numpy
+h5py
+torch
+scikit-learn
+
+# Notebook / plotting support used by train.ipynb
+matplotlib
+jupyter
+ipykernel
