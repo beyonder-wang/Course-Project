@@ -1,0 +1,10 @@
+{
+  "dataset": "MDD",
+  "model": "EEGNet",
+  "lr": 0.0005,
+  "epochs": 5,
+  "batch_size": 32,
+  "channels": 20,
+  "num_classes": 2,
+  "time_points": 200
+}

@@ -78,10 +78,10 @@ class Trainer:
             "val_accuracies": self.val_accuracies,
         }
 
-    def save_predictions(self, data_name, output_dir="Results"):
+    def save_predictions(self, output_dir):
         self.model.eval()
         os.makedirs(output_dir, exist_ok=True)
-        output_path = os.path.join(output_dir, f"{data_name}.txt")
+        output_path = os.path.join(output_dir, "predictions.txt")
 
         all_test_labels = []
         with torch.no_grad():
