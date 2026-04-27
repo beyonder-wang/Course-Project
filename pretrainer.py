@@ -20,6 +20,8 @@ class Pretrainer:
 
     def __init__(self, model, train_loader, lr, epochs, temperature=0.1,
                  transform=None, is_phase2=False, balance_weight=0.01, device="cpu"):
+        if transform is None:
+            raise ValueError("transform must be provided (e.g. SimCLRTransform instance)")
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.train_loader = train_loader

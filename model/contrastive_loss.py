@@ -31,11 +31,6 @@ class NTXentLoss(nn.Module):
         z = torch.cat([z_i, z_j], dim=0)  # (2B, proj_dim)
         sim = torch.mm(z, z.T) / self.temperature  # (2B, 2B)
 
-        # Positive pairs: (i, i+B) and (i+B, i) for i in [0, B)
-        pos_mask = torch.zeros(2 * B, 2 * B, device=z.device)
-        pos_mask[torch.arange(B), torch.arange(B, 2 * B)] = 1
-        pos_mask[torch.arange(B, 2 * B), torch.arange(B)] = 1
-
         # Mask out self-contrast
         self_mask = torch.eye(2 * B, device=z.device)
         sim = sim - self_mask * 1e9

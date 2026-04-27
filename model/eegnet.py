@@ -53,7 +53,7 @@ class EEGNet(nn.Module):
                 )
 
     def forward(self, x):
-        self.norm(x)
+        x = self.norm(x)
         x = self.block1(x.unsqueeze(dim=1))
         x = self.block2(x)
         x = self.block3(x)
