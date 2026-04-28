@@ -152,6 +152,8 @@ def _write_pretrain_summary(run_dir, args, config, history, phase_label):
         lines.append(f"Balance wt:   {config.get('balance_weight', 'N/A')}")
     lines.append(f"LR:           {config['lr']}")
     lines.append(f"Batch size:   {config['batch_size']}")
+    lines.append(f"AMP:          {config.get('amp', False)}")
+    lines.append(f"Grad accum:   {config.get('grad_accum_steps', 1)}")
     lines.append(f"Epochs:       {config['epochs']}")
     lines.append(f"Temperature:  {config['temperature']}")
     lines.append(f"Use all data: {config['use_all_data']}")
@@ -191,6 +193,8 @@ def _write_finetune_summary(run_dir, args, config, metrics, phase_label):
     lines.append(f"Classifier LR: {config['classifier_lr']}")
     lines.append(f"Epochs:        {config['epochs']}")
     lines.append(f"Batch size:    {config['batch_size']}")
+    lines.append(f"AMP:           {config.get('amp', False)}")
+    lines.append(f"Grad accum:    {config.get('grad_accum_steps', 1)}")
     lines.append(f"Patience:      {config['patience']}")
     lines.append(f"Pretrained:    {config.get('pretrained_encoder', 'N/A')}")
 
@@ -242,6 +246,8 @@ def _phase1_pretrain(args):
         is_phase2=False,
         balance_weight=args.balance_weight if args.use_moe else 0.0,
         device=args.device,
+        use_amp=args.amp,
+        grad_accum_steps=args.grad_accum_steps,
     )
 
     moe_tag = "+MoE" if args.use_moe else ""
@@ -270,7 +276,8 @@ def _phase1_pretrain(args):
         "epochs": args.epochs_pretrain, "batch_size": args.batch_size,
         "temperature": args.temperature, "use_all_data": args.use_all_data,
         "aug_std": args.aug_std, "aug_dropout": args.aug_dropout,
-        "aug_shift": args.aug_shift,
+        "aug_shift": args.aug_shift, "amp": args.amp,
+        "grad_accum_steps": args.grad_accum_steps,
     }
     if args.use_moe:
         config.update(moe_num_experts=args.moe_num_experts,
@@ -344,6 +351,8 @@ def _phase1_finetune(args):
         optimizer=optimizer,
         patience=args.patience,
         device=args.device,
+        use_amp=args.amp,
+        grad_accum_steps=args.grad_accum_steps,
     )
 
     moe_tag = " +MoE" if args.use_moe else ""
@@ -377,7 +386,8 @@ def _phase1_finetune(args):
         "num_layers": args.num_layers, "dropout": args.dropout,
         "encoder_lr": args.encoder_lr, "classifier_lr": args.classifier_lr,
         "epochs": args.epochs_finetune, "batch_size": args.batch_size,
-        "patience": args.patience,
+        "patience": args.patience, "amp": args.amp,
+        "grad_accum_steps": args.grad_accum_steps,
         "pretrained_encoder": args.pretrained_encoder,
     }
     with open(os.path.join(run_dir, "config.json"), "w") as f:
@@ -432,6 +442,8 @@ def _phase2_pretrain(args):
         is_phase2=True,
         balance_weight=args.balance_weight if args.use_moe else 0.0,
         device=args.device,
+        use_amp=args.amp,
+        grad_accum_steps=args.grad_accum_steps,
     )
 
     print(f"LR: {args.lr} | Batch: {args.batch_size} | Epochs: {args.epochs_pretrain}")
@@ -452,7 +464,8 @@ def _phase2_pretrain(args):
         "epochs": args.epochs_pretrain, "batch_size": args.batch_size,
         "temperature": args.temperature, "use_all_data": args.use_all_data,
         "aug_std": args.aug_std, "aug_dropout": args.aug_dropout,
-        "aug_shift": args.aug_shift,
+        "aug_shift": args.aug_shift, "amp": args.amp,
+        "grad_accum_steps": args.grad_accum_steps,
     }
     if args.use_moe:
         config.update(moe_num_experts=args.moe_num_experts,
@@ -583,7 +596,8 @@ def _phase2_finetune(args):
         "dropout": args.dropout, "encoder_lr": args.encoder_lr,
         "classifier_lr": args.classifier_lr,
         "epochs": args.epochs_finetune, "batch_size": args.batch_size,
-        "patience": args.patience,
+        "patience": args.patience, "amp": args.amp,
+        "grad_accum_steps": args.grad_accum_steps,
         "pretrained_encoder": args.pretrained_encoder,
         "pretrained_adapter": args.pretrained_adapter,
     }
@@ -615,6 +629,8 @@ def main():
     parser.add_argument("--epochs_pretrain", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=256,
                         help="Batch size (larger for SimCLR)")
+    parser.add_argument("--grad_accum_steps", type=int, default=1,
+                        help="Accumulate gradients for this many micro-batches")
     parser.add_argument("--temperature", type=float, default=0.1)
     parser.add_argument("--use_all_data", action="store_true",
                         help="Include val.h5 and test_x_only.h5 in pre-training")
@@ -659,8 +675,10 @@ def main():
                         help="Path to adapter.pt for Phase 2 fine-tuning")
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="auto",
-                        help="Device: cpu, cuda, cuda:0, etc. (auto-fallback if CUDA missing)")
+    parser.add_argument("--device", type=str, default="cuda",
+                        help="Device: cpu, cuda, cuda:0, cuda:3, etc. (auto-fallback if CUDA missing)")
+    parser.add_argument("--amp", action="store_true",
+                        help="Enable mixed-precision training on CUDA")
 
     args = parser.parse_args()
     args.device = resolve_device(args.device)

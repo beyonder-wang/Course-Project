@@ -1,12 +1,14 @@
 import copy
 import os
+from contextlib import nullcontext
 import torch
 import torch.nn as nn
 
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, test_loader, lr, epochs,
-                 optimizer=None, patience=0, device="cpu"):
+                 optimizer=None, patience=0, device="cpu", use_amp=False,
+                 grad_accum_steps=1):
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -15,11 +17,14 @@ class Trainer:
         self.lr = lr
         self.epochs = epochs
         self.patience = patience
+        self.use_amp = bool(use_amp and self.device.type == "cuda")
+        self.grad_accum_steps = max(1, int(grad_accum_steps))
 
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
             model.parameters(), lr=lr
         )
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
 
         self.train_losses = []
         self.val_losses = []
@@ -35,20 +40,46 @@ class Trainer:
             self.model.train()
             train_loss_sum = 0.0
             train_num = 0
+            pending_steps = 0
+            self.optimizer.zero_grad(set_to_none=True)
 
             for data, label in self.train_loader:
-                data = data.to(self.device)
-                label = label.to(self.device)
+                data = data.to(self.device, non_blocking=True)
+                label = label.to(self.device, non_blocking=True)
 
-                self.optimizer.zero_grad()
-                output = self.model(data)
-                loss = self.criterion(output, label)
-                loss.backward()
-                self.optimizer.step()
+                autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
+                with autocast_ctx():
+                    output = self.model(data)
+                    loss = self.criterion(output, label)
+
+                raw_loss = loss.detach().item()
+                scaled_loss = loss / self.grad_accum_steps
+                if self.use_amp:
+                    self.scaler.scale(scaled_loss).backward()
+                else:
+                    scaled_loss.backward()
+
+                pending_steps += 1
+                if pending_steps >= self.grad_accum_steps:
+                    if self.use_amp:
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
+                    else:
+                        self.optimizer.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    pending_steps = 0
 
                 n = label.size(0)
-                train_loss_sum += loss.item() * n
+                train_loss_sum += raw_loss * n
                 train_num += n
+
+            if pending_steps > 0:
+                if self.use_amp:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
 
             epoch_train_loss = train_loss_sum / train_num
             self.train_losses.append(epoch_train_loss)
@@ -60,11 +91,13 @@ class Trainer:
 
             with torch.no_grad():
                 for val_data, val_label in self.val_loader:
-                    val_data = val_data.to(self.device)
-                    val_label = val_label.to(self.device)
+                    val_data = val_data.to(self.device, non_blocking=True)
+                    val_label = val_label.to(self.device, non_blocking=True)
 
-                    val_output = self.model(val_data)
-                    val_loss = self.criterion(val_output, val_label)
+                    autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
+                    with autocast_ctx():
+                        val_output = self.model(val_data)
+                        val_loss = self.criterion(val_output, val_label)
 
                     n = val_label.size(0)
                     val_loss_sum += val_loss.item() * n
@@ -121,8 +154,10 @@ class Trainer:
         all_test_labels = []
         with torch.no_grad():
             for test_data in self.test_loader:
-                test_data = test_data.to(self.device)
-                test_output = self.model(test_data)
+                test_data = test_data.to(self.device, non_blocking=True)
+                autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
+                with autocast_ctx():
+                    test_output = self.model(test_data)
                 test_pred = torch.argmax(test_output, dim=1)
                 all_test_labels.extend(test_pred.cpu().tolist())
 

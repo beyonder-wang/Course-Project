@@ -26,7 +26,12 @@ def resolve_device(device_str="cpu"):
 
     if device_str.startswith("cuda"):
         if not torch.cuda.is_available():
-            print(f"[WARNING] CUDA requested but not available, falling back to CPU")
+            print(
+                "[WARNING] CUDA requested but PyTorch cannot initialize it; "
+                "falling back to CPU. This usually means the NVIDIA driver is "
+                "older than the PyTorch CUDA build, or the installed PyTorch "
+                "package is CPU-only."
+            )
             return "cpu"
         if ":" in device_str:
             idx = int(device_str.split(":")[1])
