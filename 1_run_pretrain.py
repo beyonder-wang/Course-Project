@@ -675,7 +675,7 @@ def main():
                         help="Path to adapter.pt for Phase 2 fine-tuning")
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda",
+    parser.add_argument("--device", type=str, default="cuda:1",
                         help="Device: cpu, cuda, cuda:0, cuda:3, etc. (auto-fallback if CUDA missing)")
     parser.add_argument("--amp", action="store_true",
                         help="Enable mixed-precision training on CUDA")
