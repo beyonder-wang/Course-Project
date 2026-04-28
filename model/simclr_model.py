@@ -73,8 +73,9 @@ class SimCLREncoder(nn.Module):
 
     def get_encoder_state_dict(self):
         """Return LSTM-only state dict for loading into downstream EEGLSTM."""
-        return {k.removeprefix("lstm."): v for k, v in self.state_dict().items()
-                if k.startswith("lstm.")}
+        prefix = "lstm."
+        return {k[len(prefix):]: v for k, v in self.state_dict().items()
+            if k.startswith(prefix)}
 
 
 class MoESimCLREncoder(SimCLREncoder):
