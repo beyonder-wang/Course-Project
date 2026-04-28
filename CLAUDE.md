@@ -28,13 +28,28 @@ Defined in `model/` package:
 - **EEGNet** (`model/eegnet.py`) — CNN with temporal/spatial/separable convolutions
 - **EEGGRU** (`model/rnn.py`) — bidirectional GRU
 - **EEGLSTM** (`model/rnn.py`) — bidirectional LSTM
+- **EEGMamba** (`model/mamba_model.py`) — bidirectional Mamba (selective state-space model)
+
+### KAN classifier variants (`model/kan_backbones.py`)
+Replace the MLP classifier head with KANMLP. Add `_KAN` suffix:
+- **EEGLSTM_KAN**, **EEGGRU_KAN**, **EEGNet_KAN**, **EEGMamba_KAN**, **SimpleMLP_KAN**
+
+### Attention-enhanced variants (`model/attention_eeg.py`)
+- **EEGNet_SE** — EEGNet + Squeeze-and-Excitation channel attention
+- **EEGNet_SimAM** — EEGNet + parameter-free SimAM attention (zero extra params)
+- **EEGNet_SimAM_SE** — EEGNet with both SE + SimAM attention
 
 ### Pre-training & MoE modules (in `model/`)
 - **SimCLREncoder** (`model/simclr_model.py`) — LSTM encoder + projection head for contrastive learning; weight-transfer compatible with EEGLSTM
 - **MoESimCLREncoder** (`model/simclr_model.py`) — SimCLREncoder with Mixture of Experts between LSTM and projection head
+- **MultiBandSimCLREncoder** (`model/multiband_simclr.py`) — Multi-band SimCLR: FFT band decomposition + shared LSTM + per-band projection heads
+- **MultiBandMoESimCLREncoder** (`model/multiband_simclr.py`) — Multi-band SimCLR with MoE between LSTM and projections
 - **MoELayer** (`model/moe.py`) — Top-k gated MoE with load balancing loss
 - **ChannelAdapter** (`model/channel_adapter.py`) — Per-dataset 1×1 Conv1d to unify channel counts (Phase 2)
 - **NTXentLoss** (`model/contrastive_loss.py`) — SimCLR normalized temperature-scaled cross-entropy
+- **MultiBandNTXentLoss** (`model/multiband_loss.py`) — Multi-head NT-Xent loss per frequency band
+- **KANLinear / KANMLP** (`model/kan.py`) — Kolmogorov-Arnold Network layer (learnable B-spline activations)
+- **BandDecomposition** (`model/band_decomposition.py`) — FFT-based EEG frequency band splitting (delta/theta/alpha/beta/gamma)
 - **Augmentations** (`model/augmentations.py`) — GaussianNoise, ChannelDropout, TimeShift, Compose, SimCLRTransform
 
 ## Key Files
@@ -44,9 +59,11 @@ Defined in `model/` package:
 | `0_run_train.py` | **CLI entry point** for supervised training and test prediction |
 | `1_run_pretrain.py` | **CLI entry point** for SimCLR pre-training + fine-tuning (Phases 1–4, supports MoE) |
 | `2_run_benchmark.py` | **CLI entry point** for multi-dataset benchmark (baseline / finetune / compare) |
+| `3_run_multiband_simclr.py` | **CLI entry point** for multi-band SimCLR (5-band + multi-head NT-Xent + fine-tune) |
 | `prepare_folds.py` | **Upstream**: merge train+val, generate stratified 5-fold CV splits |
 | `trainer.py` | `Trainer` class: training loop, early stopping, device support, prediction saving |
 | `pretrainer.py` | `Pretrainer` class: SimCLR contrastive training loop with augmentation + balance loss |
+| `pretrainer_multiband.py` | `MultiBandPretrainer` class: multi-band contrastive training loop |
 | `utils.py` | Data loaders (`create_dataloaders`, `create_pretrain_loaders`, `create_multi_pretrain_loaders`), device resolution, log/summary helpers |
 | `model/` | Package with model definitions (`__init__.py` exports `MODEL_DICT`) |
 | `data/TEST_DATASET.py` | PyTorch Dataset classes: `TrainDataset`, `FoldDataset`, `TestDataset`, `UnlabeledDataset`, `MultiUnlabeledDataset` |
@@ -78,6 +95,22 @@ python 1_run_pretrain.py --phase 2 --action finetune --dataset MDD --pretrained_
 python 2_run_benchmark.py --mode baseline --model EEGLSTM --epochs 30 --device cpu
 python 2_run_benchmark.py --mode finetune --encoder Pretrained/multi_phase2_xxx/encoder.pt --adapter Pretrained/multi_phase2_xxx/adapter.pt
 python 2_run_benchmark.py --mode compare
+
+# === Multi-band SimCLR (3_run_multiband_simclr.py) ===
+python 3_run_multiband_simclr.py --action pretrain --dataset MDD --epochs_pretrain 50
+python 3_run_multiband_simclr.py --action both --dataset MDD --epochs_pretrain 50
+python 3_run_multiband_simclr.py --action both --dataset MDD --use_moe --epochs_pretrain 50
+
+# === Mamba backbone (via 0_run_train.py) ===
+python 0_run_train.py --dataset MDD --model EEGMamba --epochs 30 --device cpu
+
+# === KAN classifier variants ===
+python 0_run_train.py --dataset MDD --model EEGLSTM_KAN --epochs 30
+python 0_run_train.py --dataset MDD --model EEGNet_KAN --epochs 30
+
+# === Attention-enhanced EEGNet ===
+python 0_run_train.py --dataset MDD --model EEGNet_SimAM --epochs 30
+python 0_run_train.py --dataset MDD --model EEGNet_SE --epochs 30
 
 # View dataset info
 python -c "import json; info=json.load(open('data/MDD/dataset_info.json')); print(info['dataset']['category_list'], len(info['dataset']['channels']))"
@@ -150,6 +183,27 @@ Pretrained/MDD_phase1_20260427_120000/
 - SimCLR pre-training discards labels; uses data augmentation for contrastive pairs
 - MoE layer sits between LSTM encoder and projection/classifier head; discarded if not needed
 - ChannelAdapter in Phase 2 uses per-dataset 1×1 Conv1d to unify channel counts
+
+## `3_run_multiband_simclr.py` Reference
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--action` | both | pretrain / finetune / both |
+| `--dataset` | MDD | Target dataset (all 5 supported) |
+| `--lr` | 5e-4 | Pre-training learning rate |
+| `--epochs_pretrain` | 50 | Pre-training epochs |
+| `--epochs_finetune` | 30 | Fine-tuning epochs |
+| `--batch_size` | 256 | Batch size (larger for SimCLR) |
+| `--temperature` | 0.1 | NT-Xent temperature |
+| `--use_all_data` | False | Include val+test in pre-training |
+| `--encoder_lr` | 5e-5 | Encoder LR during fine-tuning |
+| `--classifier_lr` | 5e-4 | Classifier LR during fine-tuning |
+| `--patience` | 0 | Early stopping patience (0=disabled) |
+| `--use_moe` | False | Enable MoE layer |
+| `--moe_num_experts` | 4 | Number of MoE experts |
+| `--moe_top_k` | 2 | Top-k experts per token |
+| `--balance_weight` | 0.01 | Load balancing loss weight |
+| `--device` | auto | Device: cpu, cuda, cuda:0, auto |
 
 ## Known Results (on MDD dataset)
 

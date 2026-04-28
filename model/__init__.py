@@ -1,6 +1,14 @@
 from .simple import SimpleLinear, SimpleMLP
 from .eegnet import EEGNet
 from .rnn import EEGGRU, EEGLSTM
+from .mamba_model import EEGMamba
+from .kan_backbones import (
+    SimpleMLP_KAN, EEGLSTM_KAN, EEGGRU_KAN, EEGNet_KAN, EEGMamba_KAN,
+)
+from .attention_eeg import (
+    EEGNet_SE, EEGNet_SimAM, EEGNet_SimAM_SE,
+    SEBlock, SimAM, SpatialAttention1D,
+)
 from .simclr_model import SimCLREncoder, MoESimCLREncoder
 from .contrastive_loss import NTXentLoss
 from .augmentations import (
@@ -8,20 +16,54 @@ from .augmentations import (
 )
 from .channel_adapter import ChannelAdapter, Phase2SimCLR, Phase2MoESimCLR
 from .moe import MoELayer
+from .kan import KANLinear, KANMLP
+from .band_decomposition import BandDecomposition
+from .multiband_loss import MultiBandNTXentLoss
+from .multiband_simclr import MultiBandSimCLREncoder, MultiBandMoESimCLREncoder
 
 MODEL_DICT = {
+    # Original baselines
     "SimpleLinear": SimpleLinear,
     "SimpleMLP": SimpleMLP,
     "EEGNet": EEGNet,
     "EEGGRU": EEGGRU,
     "EEGLSTM": EEGLSTM,
+    "EEGMamba": EEGMamba,
+    # KAN classifier variants
+    "SimpleMLP_KAN": SimpleMLP_KAN,
+    "EEGLSTM_KAN": EEGLSTM_KAN,
+    "EEGGRU_KAN": EEGGRU_KAN,
+    "EEGNet_KAN": EEGNet_KAN,
+    "EEGMamba_KAN": EEGMamba_KAN,
+    # Attention-enhanced variants
+    "EEGNet_SE": EEGNet_SE,
+    "EEGNet_SimAM": EEGNet_SimAM,
+    "EEGNet_SimAM_SE": EEGNet_SimAM_SE,
 }
 
 __all__ = [
-    "SimpleLinear", "SimpleMLP", "EEGNet", "EEGGRU", "EEGLSTM",
+    # Supervised baselines
+    "SimpleLinear", "SimpleMLP", "EEGNet", "EEGGRU", "EEGLSTM", "EEGMamba",
+    # KAN classifier variants
+    "SimpleMLP_KAN", "EEGLSTM_KAN", "EEGGRU_KAN", "EEGNet_KAN", "EEGMamba_KAN",
+    # Attention variants
+    "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
+    "SEBlock", "SimAM", "SpatialAttention1D",
+    # SimCLR encoders
     "SimCLREncoder", "MoESimCLREncoder",
-    "NTXentLoss",
+    "MultiBandSimCLREncoder", "MultiBandMoESimCLREncoder",
+    # Loss functions
+    "NTXentLoss", "MultiBandNTXentLoss",
+    # Augmentations
     "GaussianNoise", "ChannelDropout", "TimeShift", "Compose", "SimCLRTransform",
+    # Channel adaptation
     "ChannelAdapter", "Phase2SimCLR", "Phase2MoESimCLR",
-    "MoELayer", "MODEL_DICT",
+    # MoE
+    "MoELayer",
+    # KAN
+    "KANLinear", "KANMLP",
+    # Band decomposition
+    "BandDecomposition",
+    # Registry
+    "MODEL_DICT",
 ]
