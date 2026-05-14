@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 from model import MODEL_DICT
-from utils import load_dataset_info, create_dataloaders, resolve_device
+from utils import load_dataset_info, create_dataloaders, resolve_device, start_log, stop_log, write_summary_txt
 from trainer import Trainer
 
 
@@ -37,11 +37,14 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     )
 
     model_cls = MODEL_DICT[args.model]
+    time_point_models = {"EEGNet", "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
+                         "EEGNet_KAN", "ShallowConvNet", "ATCNet", "FBCNet",
+                         "EEGTCNet", "MICNN"}
     if args.model in ("SimpleLinear", "SimpleMLP"):
         model = model_cls(
             input_channels=channels, time_points=time_points, num_classes=num_classes
         )
-    elif args.model == "EEGNet":
+    elif args.model in time_point_models:
         model = model_cls(
             chans=channels, num_classes=num_classes, time_point=time_points
         )
@@ -81,14 +84,14 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="MDD",
+        default="BCIC2A",
         choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SLEEP"],
         help="Dataset name",
     )
     parser.add_argument(
         "--model",
         type=str,
-        default="EEGNet",
+        default="EEGNet_KAN",
         choices=list(MODEL_DICT.keys()),
         help="Model architecture",
     )
@@ -98,7 +101,7 @@ def main():
     parser.add_argument(
         "--fold",
         type=int,
-        default=None,
+        default=-1,
         help="CV fold (1-5), -1 for all 5 folds (requires prepare_folds.py). "
              "Omit to use original train/val split.",
     )
@@ -125,6 +128,7 @@ def main():
         tag = f"{args.dataset}_{args.model}_{timestamp}"
     run_dir = os.path.join("Results", tag)
     os.makedirs(run_dir, exist_ok=True)
+    tee = start_log(run_dir)
 
     # Save config
     config = vars(args)
@@ -182,6 +186,7 @@ def main():
         _train_fold(args, args.fold, run_dir, channels, num_classes, time_points)
 
     print(f"\nAll outputs saved to: {run_dir}/")
+    stop_log(tee)
 
 
 if __name__ == "__main__":

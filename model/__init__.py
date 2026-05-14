@@ -20,6 +20,11 @@ from .kan import KANLinear, KANMLP
 from .band_decomposition import BandDecomposition
 from .multiband_loss import MultiBandNTXentLoss
 from .multiband_simclr import MultiBandSimCLREncoder, MultiBandMoESimCLREncoder
+from .mi_cnn import MICNN
+from .fbcnet import FBCNet
+from .tcnet import EEGTCNet
+from .shallownet import ShallowConvNet
+from .atcnet import ATCNet
 
 MODEL_DICT = {
     # Original baselines
@@ -39,6 +44,16 @@ MODEL_DICT = {
     "EEGNet_SE": EEGNet_SE,
     "EEGNet_SimAM": EEGNet_SimAM,
     "EEGNet_SimAM_SE": EEGNet_SimAM_SE,
+    # Custom motor imagery CNN
+    "MICNN": MICNN,
+    # FBCNet: multi-band + spatial conv + variance pooling
+    "FBCNet": FBCNet,
+    # EEG-TCNet: EEGNet + TCN
+    "EEGTCNet": EEGTCNet,
+    # ShallowConvNet: FBCSP-inspired shallow CNN
+    "ShallowConvNet": ShallowConvNet,
+    # ATCNet: Attention TCN for motor imagery
+    "ATCNet": ATCNet,
 }
 
 __all__ = [
@@ -64,6 +79,8 @@ __all__ = [
     "KANLinear", "KANMLP",
     # Band decomposition
     "BandDecomposition",
+    # ShallowConvNet & ATCNet
+    "ShallowConvNet", "ATCNet",
     # Registry
     "MODEL_DICT",
 ]

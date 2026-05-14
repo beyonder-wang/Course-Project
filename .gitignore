@@ -21,6 +21,8 @@ data/BCIC2A/all.h5
 
 __pycache__
 .claude
-Results
+Results/*
+!Results/**/
+!Results/**/predictions.txt
 .venv
 Pretrained

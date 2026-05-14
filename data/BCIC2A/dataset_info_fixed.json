@@ -45,7 +45,7 @@
   },
   "processing": {
     "target_sampling_rate": 200.0,
-    "window_sec": 1.0,
+    "window_sec": 4.0,
     "stride_sec": 1.0,
     "filter_low": 0.1,
     "filter_high": 75.0,
