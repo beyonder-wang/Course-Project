@@ -1,6 +1,7 @@
 import copy
 import os
 from contextlib import nullcontext
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -8,7 +9,8 @@ import torch.nn as nn
 class Trainer:
     def __init__(self, model, train_loader, val_loader, test_loader, lr, epochs,
                  optimizer=None, patience=0, device="cpu", use_amp=False,
-                 grad_accum_steps=1):
+                 grad_accum_steps=1, scheduler=None, label_smoothing=0.0,
+                 batch_transform=None, mixup_alpha=0.0):
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.train_loader = train_loader
@@ -19,8 +21,11 @@ class Trainer:
         self.patience = patience
         self.use_amp = bool(use_amp and self.device.type == "cuda")
         self.grad_accum_steps = max(1, int(grad_accum_steps))
+        self.scheduler = scheduler
+        self.batch_transform = batch_transform
+        self.mixup_alpha = float(max(0.0, mixup_alpha))
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
             model.parameters(), lr=lr
         )
@@ -31,6 +36,14 @@ class Trainer:
         self.val_accuracies = []
         self.best_state = None
         self.best_epoch = 0
+
+    def _mixup(self, data, label):
+        if self.mixup_alpha <= 0 or data.size(0) < 2:
+            return data, label, label, 1.0
+        lam = float(np.random.beta(self.mixup_alpha, self.mixup_alpha))
+        index = torch.randperm(data.size(0), device=data.device)
+        mixed = lam * data + (1.0 - lam) * data[index]
+        return mixed, label, label[index], lam
 
     def train(self):
         best_acc = 0.0
@@ -46,11 +59,18 @@ class Trainer:
             for data, label in self.train_loader:
                 data = data.to(self.device, non_blocking=True)
                 label = label.to(self.device, non_blocking=True)
+                if self.batch_transform is not None:
+                    data = self.batch_transform(data)
+                data, label_a, label_b, lam = self._mixup(data, label)
 
                 autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
                 with autocast_ctx():
                     output = self.model(data)
-                    loss = self.criterion(output, label)
+                    if self.mixup_alpha > 0 and data.size(0) > 1:
+                        loss = lam * self.criterion(output, label_a)
+                        loss = loss + (1.0 - lam) * self.criterion(output, label_b)
+                    else:
+                        loss = self.criterion(output, label)
 
                 raw_loss = loss.detach().item()
                 scaled_loss = loss / self.grad_accum_steps
@@ -111,6 +131,11 @@ class Trainer:
 
             self.val_losses.append(epoch_val_loss)
             self.val_accuracies.append(epoch_val_acc)
+            if self.scheduler is not None:
+                if isinstance(self.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
+                    self.scheduler.step(epoch_val_loss)
+                else:
+                    self.scheduler.step()
 
             if epoch_val_acc > best_acc:
                 best_acc = epoch_val_acc

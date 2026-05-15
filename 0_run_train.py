@@ -20,12 +20,14 @@ and a cv_summary.json aggregating the 5-fold results.
 import argparse
 import json
 import os
+import random
 from datetime import datetime
 
 import numpy as np
 import torch
+from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
 
-from model import MODEL_DICT
+from model import MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose
 from utils import load_dataset_info, create_dataloaders, resolve_device, start_log, stop_log, write_summary_txt
 from trainer import Trainer
 
@@ -33,7 +35,12 @@ from trainer import Trainer
 def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     """Train on one fold (or original split if fold is None) and save results."""
     train_loader, val_loader, test_loader = create_dataloaders(
-        args.dataset, args.batch_size, fold=fold
+        args.dataset,
+        args.batch_size,
+        fold=fold,
+        standardize=args.standardize_inputs,
+        sr_aug_times=args.sr_aug_times,
+        sr_segments=args.sr_segments,
     )
 
     model_cls = MODEL_DICT[args.model]
@@ -45,11 +52,40 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             input_channels=channels, time_points=time_points, num_classes=num_classes
         )
     elif args.model in time_point_models:
-        model = model_cls(
-            chans=channels, num_classes=num_classes, time_point=time_points
-        )
+        model_kwargs = dict(chans=channels, num_classes=num_classes, time_point=time_points)
+        if args.model == "ATCNet":
+            model_kwargs["n_windows"] = args.atc_n_windows
+            model_kwargs["F1"] = args.atc_f1
+            model_kwargs["d_model"] = args.atc_d_model
+            model_kwargs["dropout_conv"] = args.atc_dropout_conv
+            model_kwargs["dropout_attn"] = args.atc_dropout_attn
+            model_kwargs["dropout_tcn"] = args.atc_dropout_tcn
+            model_kwargs["tcn_depth"] = args.atc_tcn_depth
+        model = model_cls(**model_kwargs)
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
+
+    optimizer_cls = torch.optim.AdamW if args.weight_decay > 0 else torch.optim.Adam
+    optimizer = optimizer_cls(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = None
+    if args.scheduler == "cosine":
+        scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
+    elif args.scheduler == "plateau":
+        scheduler = ReduceLROnPlateau(
+            optimizer, mode="min", factor=args.plateau_factor,
+            patience=args.plateau_patience, min_lr=args.plateau_min_lr
+        )
+
+    batch_transform = None
+    transforms = []
+    if args.aug_noise_std > 0:
+        transforms.append(GaussianNoise(args.aug_noise_std))
+    if args.aug_channel_dropout > 0:
+        transforms.append(ChannelDropout(args.aug_channel_dropout))
+    if args.aug_time_shift > 0:
+        transforms.append(TimeShift(args.aug_time_shift))
+    if transforms:
+        batch_transform = Compose(*transforms)
 
     trainer = Trainer(
         model=model,
@@ -58,6 +94,12 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         test_loader=test_loader,
         lr=args.lr,
         epochs=args.epochs,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        label_smoothing=args.label_smoothing,
+        batch_transform=batch_transform,
+        mixup_alpha=args.mixup_alpha,
+        patience=args.patience,
         device=args.device,
     )
 
@@ -98,18 +140,66 @@ def main():
     parser.add_argument("--lr", type=float, default=5e-4, help="Learning rate")
     parser.add_argument("--epochs", type=int, default=5, help="Number of epochs")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--patience", type=int, default=0, help="Early stopping patience (0 disables)")
     parser.add_argument(
         "--fold",
         type=int,
-        default=-1,
+        default=None,
         help="CV fold (1-5), -1 for all 5 folds (requires prepare_folds.py). "
              "Omit to use original train/val split.",
     )
     parser.add_argument("--device", type=str, default="cpu",
                         help="Device: cpu, cuda, cuda:0, etc. (auto-fallback to CPU)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
+    parser.add_argument("--standardize_inputs", action="store_true",
+                        help="Standardize inputs with train-split channel/time statistics")
+    parser.add_argument("--label_smoothing", type=float, default=0.0,
+                        help="Label smoothing factor for cross-entropy")
+    parser.add_argument("--scheduler", type=str, default="none",
+                        choices=["none", "cosine", "plateau"], help="Learning-rate scheduler")
+    parser.add_argument("--plateau_factor", type=float, default=0.9,
+                        help="ReduceLROnPlateau factor")
+    parser.add_argument("--plateau_patience", type=int, default=20,
+                        help="ReduceLROnPlateau patience in epochs")
+    parser.add_argument("--plateau_min_lr", type=float, default=1e-4,
+                        help="ReduceLROnPlateau minimum learning rate")
+    parser.add_argument("--weight_decay", type=float, default=0.0,
+                        help="Weight decay (uses AdamW when > 0)")
+    parser.add_argument("--mixup_alpha", type=float, default=0.0,
+                        help="Beta alpha for mixup (0 disables)")
+    parser.add_argument("--aug_noise_std", type=float, default=0.0,
+                        help="Gaussian noise std for supervised augmentation")
+    parser.add_argument("--aug_channel_dropout", type=float, default=0.0,
+                        help="Channel dropout probability for supervised augmentation")
+    parser.add_argument("--aug_time_shift", type=int, default=0,
+                        help="Max circular time shift in samples for augmentation")
+    parser.add_argument("--atc_n_windows", type=int, default=5,
+                        help="Sliding-window count for ATCNet")
+    parser.add_argument("--sr_aug_times", type=int, default=0,
+                        help="Times to expand the train split with segment-reconstruction augmentation")
+    parser.add_argument("--sr_segments", type=int, default=8,
+                        help="Number of temporal segments for segment-reconstruction augmentation")
+    parser.add_argument("--atc_f1", type=int, default=16,
+                        help="ATCNet frontend temporal filter count")
+    parser.add_argument("--atc_d_model", type=int, default=32,
+                        help="ATCNet attention/TCN hidden size")
+    parser.add_argument("--atc_dropout_conv", type=float, default=0.3,
+                        help="ATCNet conv-block dropout")
+    parser.add_argument("--atc_dropout_attn", type=float, default=0.5,
+                        help="ATCNet attention dropout")
+    parser.add_argument("--atc_dropout_tcn", type=float, default=0.3,
+                        help="ATCNet TCN dropout")
+    parser.add_argument("--atc_tcn_depth", type=int, default=2,
+                        help="ATCNet TCN depth")
 
     args = parser.parse_args()
     args.device = resolve_device(args.device)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     # --- Validate fold ---
     if args.fold is not None and args.fold not in (-1, 1, 2, 3, 4, 5):

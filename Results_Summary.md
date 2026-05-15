@@ -6,8 +6,12 @@
 | none MoE | 0.8641 | 0.8750 (epoch 27) |
 | with MoE | 0.8547 | 0.8641 (epoch 22) |
 
-
-
+## Method: BCIC2A ATCNet optimization + ensemble
+*Config: backbone: ATCNet (n_windows=5), dataset: BCIC2A, fold=1, epoch=120, optimizer: Adam*
+| method | key settings | Val ACC / Seed Sweep Best | Ensemble |
+| --- | --- | --- | --- |
+| ATCNet baseline (prior) | lr=1e-3, 30ep | **66.20%** | — |
+| +mixup+plateau | lr=1e-3, 120ep, mixup_alpha=0.2, plateau patience=15 | **68.06%** (seed 37, 97) | **71.76%** (3-model soft-voting) |
 
 ### AI's notes:
 实施完成总结

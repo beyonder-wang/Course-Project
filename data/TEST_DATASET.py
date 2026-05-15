@@ -6,8 +6,9 @@ from torch.utils.data import Dataset, DataLoader
 
 # --- Train: reads X and y ---
 class TrainDataset(Dataset):
-    def __init__(self, h5_path):
+    def __init__(self, h5_path, transform=None):
         self.h5_path = h5_path
+        self.transform = transform
         with h5py.File(self.h5_path, "r") as f:
             self.x = torch.tensor(f["X"][()], dtype=torch.float32)
             self.y = torch.tensor(f["y"][()], dtype=torch.long)
@@ -18,14 +19,18 @@ class TrainDataset(Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        return self.x[idx], self.y[idx]
+        x = self.x[idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, self.y[idx]
 
 
 # --- CV Fold: reads all.h5 + index subset ---
 class FoldDataset(Dataset):
     """Dataset that loads from merged all.h5 and indexes a specific fold subset."""
 
-    def __init__(self, all_h5_path, index_npy_path):
+    def __init__(self, all_h5_path, index_npy_path, transform=None):
+        self.transform = transform
         with h5py.File(all_h5_path, "r") as f:
             self.x = torch.tensor(f["X"][()], dtype=torch.float32)
             self.y = torch.tensor(f["y"][()], dtype=torch.long)
@@ -36,13 +41,17 @@ class FoldDataset(Dataset):
 
     def __getitem__(self, idx):
         real_idx = self.indices[idx]
-        return self.x[real_idx], self.y[real_idx]
+        x = self.x[real_idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, self.y[real_idx]
 
 
 # --- Test: reads X only ---
 class TestDataset(Dataset):
-    def __init__(self, h5_path):
+    def __init__(self, h5_path, transform=None):
         self.h5_path = h5_path
+        self.transform = transform
         with h5py.File(self.h5_path, "r") as f:
             self.x = torch.tensor(f["X"][()], dtype=torch.float32)
 
@@ -50,7 +59,28 @@ class TestDataset(Dataset):
         return len(self.x)
 
     def __getitem__(self, idx):
-        return self.x[idx]
+        x = self.x[idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x
+
+
+class MemoryTrainDataset(Dataset):
+    """In-memory tensor dataset with optional transform."""
+
+    def __init__(self, x, y, transform=None):
+        self.x = x
+        self.y = y
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.x)
+
+    def __getitem__(self, idx):
+        x = self.x[idx]
+        if self.transform is not None:
+            x = self.transform(x)
+        return x, self.y[idx]
 
 
 # --- Unlabeled: loads X from multiple HDF5 files, discarding labels ---

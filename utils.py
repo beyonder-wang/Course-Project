@@ -2,11 +2,19 @@ import json
 import os
 import sys
 from datetime import datetime
+from functools import partial
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Sampler
-from data.TEST_DATASET import TrainDataset, FoldDataset, TestDataset, UnlabeledDataset, MultiUnlabeledDataset
+from data.TEST_DATASET import (
+    TrainDataset,
+    FoldDataset,
+    TestDataset,
+    UnlabeledDataset,
+    MultiUnlabeledDataset,
+    MemoryTrainDataset,
+)
 
 
 # --- Device utilities -----------------------------------------------------------
@@ -121,7 +129,69 @@ def load_dataset_info(data_name):
     return channels, num_classes, window_sec
 
 
-def create_dataloaders(data_name, batch_size, fold=None):
+def _apply_standardization(x, mean, std, eps=1e-6):
+    return (x - mean) / (std + eps)
+
+
+def _fit_standardization(train_ds):
+    if hasattr(train_ds, "indices"):
+        train_x = train_ds.x[torch.as_tensor(train_ds.indices, dtype=torch.long)]
+    else:
+        train_x = train_ds.x
+    mean = train_x.mean(dim=0)
+    std = train_x.std(dim=0, unbiased=False)
+    return mean, std
+
+
+def _extract_xy(train_ds):
+    if hasattr(train_ds, "indices"):
+        idx = torch.as_tensor(train_ds.indices, dtype=torch.long)
+        return train_ds.x[idx].clone(), train_ds.y[idx].clone()
+    return train_ds.x.clone(), train_ds.y.clone()
+
+
+def _segment_reconstruct_augment(x, y, aug_times=1, num_segments=8):
+    """Create same-class stitched trials, inspired by CTNet S&R augmentation."""
+    if aug_times <= 0:
+        return x, y
+
+    num_segments = max(1, int(num_segments))
+    seg_len = x.shape[-1] // num_segments
+    aug_x_parts = []
+    aug_y_parts = []
+
+    for cls in torch.unique(y, sorted=True):
+        cls_x = x[y == cls]
+        if cls_x.size(0) == 0:
+            continue
+
+        aug_count = int(cls_x.size(0) * aug_times)
+        cls_aug = torch.empty(
+            (aug_count, cls_x.size(1), cls_x.size(2)),
+            dtype=cls_x.dtype,
+        )
+        for i in range(aug_count):
+            for seg_idx in range(num_segments):
+                start = seg_idx * seg_len
+                end = (seg_idx + 1) * seg_len if seg_idx < num_segments - 1 else cls_x.size(2)
+                src_idx = torch.randint(0, cls_x.size(0), (1,)).item()
+                cls_aug[i, :, start:end] = cls_x[src_idx, :, start:end]
+        aug_x_parts.append(cls_aug)
+        aug_y_parts.append(torch.full((aug_count,), cls.item(), dtype=y.dtype))
+
+    if not aug_x_parts:
+        return x, y
+
+    aug_x = torch.cat(aug_x_parts, dim=0)
+    aug_y = torch.cat(aug_y_parts, dim=0)
+    order = torch.randperm(aug_x.size(0))
+    aug_x = aug_x[order]
+    aug_y = aug_y[order]
+    return torch.cat([x, aug_x], dim=0), torch.cat([y, aug_y], dim=0)
+
+
+def create_dataloaders(data_name, batch_size, fold=None, standardize=False,
+                       sr_aug_times=0, sr_segments=8):
     """Create train/val/test DataLoaders for a dataset.
 
     If *fold* is given (int, 1-based), uses the pre-computed CV split
@@ -147,6 +217,20 @@ def create_dataloaders(data_name, batch_size, fold=None):
 
     test_path = os.path.join("data", data_name, "test_x_only.h5")
     test_ds = TestDataset(test_path)
+
+    if sr_aug_times > 0:
+        train_x, train_y = _extract_xy(train_ds)
+        aug_x, aug_y = _segment_reconstruct_augment(
+            train_x, train_y, aug_times=sr_aug_times, num_segments=sr_segments
+        )
+        train_ds = MemoryTrainDataset(aug_x, aug_y)
+
+    if standardize:
+        mean, std = _fit_standardization(train_ds)
+        transform = partial(_apply_standardization, mean=mean, std=std)
+        train_ds.transform = transform
+        val_ds.transform = transform
+        test_ds.transform = transform
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
