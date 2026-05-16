@@ -71,6 +71,14 @@ def _write_supervised_summary(run_dir, config, metrics, fold_label):
     write_summary_txt(run_dir, sections)
 
 
+def _make_run_config(args, channels, num_classes, time_points):
+    config = dict(vars(args))
+    config["channels"] = channels
+    config["num_classes"] = num_classes
+    config["time_points"] = time_points
+    return config
+
+
 def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     """Train on one fold (or original split if fold is None) and save results."""
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -196,11 +204,12 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     }
     with open(os.path.join(run_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
-    _write_supervised_summary(run_dir, config=vars(args) | {
-        "channels": channels,
-        "num_classes": num_classes,
-        "time_points": time_points,
-    }, metrics=metrics, fold_label=(fold if fold is not None else "original_split"))
+    _write_supervised_summary(
+        run_dir,
+        config=_make_run_config(args, channels, num_classes, time_points),
+        metrics=metrics,
+        fold_label=(fold if fold is not None else "original_split"),
+    )
 
     return metrics
 
@@ -343,10 +352,7 @@ def main():
     tee = start_log(run_dir)
 
     # Save config
-    config = vars(args)
-    config["channels"] = channels
-    config["num_classes"] = num_classes
-    config["time_points"] = time_points
+    config = _make_run_config(args, channels, num_classes, time_points)
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump(config, f, indent=2)
 
