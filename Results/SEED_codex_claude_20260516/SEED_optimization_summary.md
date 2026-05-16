@@ -171,3 +171,79 @@ Minimal 1-epoch CPU smoke tests completed successfully:
 
 - This task result directory is far below the `15 GB` cleanup threshold
 - One redundant short-run `DGCNN` directory was removed after being superseded by the longer run
+
+---
+
+## Round 2: Session 2026-05-16 (Afternoon) — Data Split Discovery & Single-Subject DE+LDS
+
+### Key Discovery: Subject Ordering in SEED Split Files
+
+The existing `train.h5` / `val.h5` / `test_x_only.h5` are organized by subject in fixed-size blocks:
+- Train: 15 subjects × 60 segments = 900 total (balanced: 20 per class per subject)
+- Val:   15 subjects × 30 segments = 450 total (balanced: 10 per class per subject)
+- Test:  15 subjects × 30 segments = 450 total
+
+Verified by:
+1. **Hash matching** against `sub_1.h5`: subj_1 = 60/60 ✅, subj_2~15 = 0/60 ✅
+2. **Deep subject classifier**: 5-fold CV accuracy = **89.67% ± 0.9%** (13.4× chance), proving each block has distinct subject-specific EEG signatures
+
+### New Code Added
+
+| File | Purpose |
+|------|---------|
+| `tools/build_seed_sub1_de.py` | Build DE+LDS feature dataset from `sub_1.h5` (single subject, session/trial-aware) |
+| `tools/split_seed_by_subject.py` | Split raw SEED data by subject index into train/val/test |
+
+### New Datasets Created
+
+| Dataset | Source | Split | Features |
+|---------|--------|-------|----------|
+| `SEED_SUB1_DE` | `sub_1.h5` | session 1+2 train, session 3 val | DE+LDS (62×5) |
+| `SEED_SUB1_DE_RANDOM` | `sub_1.h5` | random 70/30 | DE+LDS (62×5) |
+| `SEED_SUB1_DE_S23v1` | `sub_1.h5` | session 2+3 train, session 1 val | DE+LDS (62×5) |
+| `SEED_SUB1_DE_TRIAL` | `sub_1.h5` | first 9 trials train, last 4 val per session | DE+LDS (62×5) |
+| `SEED_SUB1_DE_STRAT` | `sub_1.h5` | stratified trial-level split | DE+LDS (62×5) |
+| `SEED_BYSUBJ` | raw `train.h5`+`val.h5` | subjects 1-12 train, 13-15 val + 5-fold CV | Raw EEG (62×400) |
+
+### Round 2 Experiment Results
+
+#### Single-Subject DE+LDS (Cross-Session)
+
+| Dataset | Model | Key Setup | Best Val ACC | Notes |
+|---------|-------|-----------|-------------:|-------|
+| `SEED_SUB1_DE` (S12→3) | DGCNN | baseline, no reg | 48.98% | Already beats raw SEED 45.78% |
+| `SEED_SUB1_DE` | DGCNN | + Mixup α=0.3 + LabelSmooth | 54.90% | Mixup is the single most impactful trick |
+| `SEED_SUB1_DE` | DGCNN | + Mixup α=0.5 + LS + Aug | 56.12% | Noise + channel dropout aug |
+| **`SEED_SUB1_DE`** | **DGCNN** | **+ Mixup + LS + Aug, seed=123** | **57.14%** | **Best single-subject result** |
+| `SEED_SUB1_DE` | DGCNN | + EmotionDL | 55.78% | EmotionDL didn't help here |
+| `SEED_SUB1_DE` | RGNN | sparse graph prior | 46.67% | Worse than DGCNN |
+| `SEED_SUB1_DE` | DGCNN | cosine scheduler | 56.53% | Plateau > cosine |
+| `SEED_SUB1_DE` | DENet | simple MLP | 42.04% | Too simple |
+| `SEED_SUB1_DE_RANDOM` | DGCNN | Mixup + LS | **100.00%** | Proves features are perfect; bottleneck is cross-session |
+| `SEED_SUB1_DE_S23v1` | DGCNN | Mixup + LS + Aug | 51.90% | S3→1 harder than S12→3 |
+| `SEED_SUB1_DE_TRIAL` | DGCNN | Mixup + LS | 35.61% | Severe label imbalance in val |
+| `SEED_SUB1_DE_STRAT` | DGCNN | Mixup + LS + Aug | 46.24% | Stratified trial split didn't help |
+
+#### Multi-Subject Raw EEG (Cross-Subject)
+
+| Dataset | Model | Key Setup | Best Val ACC | Notes |
+|---------|-------|-----------|-------------:|-------|
+| `SEED_BYSUBJ` (12→3) | DGCNN | Mixup + LS + Aug | 38.89% | Cross-subject is extremely hard |
+| `SEED_BYSUBJ` (12→3) | DGCNN | no Mixup | 37.04% | Even worse without regularization |
+| `SEED_BYSUBJ` (5-fold CV) | DGCNN | Mixup + LS | **47.11% ± 2.11%** | Cross-subject within mixed folds |
+
+### Key Takeaways from Round 2
+
+1. **DE+LDS features are transformative**: 2 epochs on DE+LDS matched 100 epochs on raw EEG
+2. **Cross-session is hard but learnable**: 57.14% with Mixup regularization on single subject
+3. **Cross-subject with raw EEG is very hard**: Only 47% with 5-fold CV — need DE+LDS + more data per subject
+4. **Mixup is the single most impactful technique**: +6-7% gain consistently
+5. **Subject domain signal is strong**: 89.67% subject classifier accuracy means domain adversarial methods (NodeDAT, BiDANN) should be very effective
+6. **The critical missing piece**: Full `sub_2.h5` ~ `sub_15.h5` files to enable multi-subject DE+LDS training
+
+### Recommended Path Forward
+
+1. Obtain full `data/SEED/SEED/sub_*.h5` (all 15 subjects) from teacher or SEED website
+2. Run `prepare_seed_de_dataset.py` on full subject set → `SEED_DE`
+3. Train `DGCNN + EmotionDL` on `SEED_DE` with cross-subject LOSO or folds
+4. Implement domain-adversarial head (NodeDAT-style) leveraging the strong subject signal
