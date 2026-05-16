@@ -83,22 +83,24 @@ class SEEDGraphormer(nn.Module):
         values, indices = torch.topk(adj, k=self.top_k, dim=-1)
         sparse = torch.zeros_like(adj)
         sparse.scatter_(dim=-1, index=indices, src=values)
-        return 0.5 * (sparse + sparse.transpose(0, 1))
+        return 0.5 * (sparse + sparse.transpose(-1, -2))
 
     def _build_adj(self, de_feats):
         static_adj = F.softplus(self.edge_logits) * self.prior_mask
+        static_adj = static_adj.unsqueeze(0).expand(de_feats.size(0), -1, -1)
 
         proj = self.dynamic_proj(de_feats)
         proj = F.normalize(proj, dim=-1)
-        dynamic_adj = torch.bmm(proj, proj.transpose(1, 2)).mean(dim=0)
-        dynamic_adj = F.relu(dynamic_adj) * self.prior_mask
+        dynamic_adj = torch.bmm(proj, proj.transpose(1, 2))
+        dynamic_adj = F.relu(dynamic_adj) * self.prior_mask.unsqueeze(0)
 
         adj = static_adj + self.dyn_alpha * dynamic_adj
         adj = self._sparsify(adj)
-        adj = adj + torch.eye(self.num_nodes, device=adj.device, dtype=adj.dtype)
+        eye = torch.eye(self.num_nodes, device=adj.device, dtype=adj.dtype).unsqueeze(0)
+        adj = adj + eye
         degree = adj.sum(dim=-1)
         inv_sqrt = torch.pow(degree + 1e-6, -0.5)
-        return inv_sqrt.unsqueeze(1) * adj * inv_sqrt.unsqueeze(0)
+        return inv_sqrt.unsqueeze(-1) * adj * inv_sqrt.unsqueeze(-2)
 
     def forward(self, x):
         de_feats = self._extract_de_features(x)

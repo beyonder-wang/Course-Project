@@ -39,17 +39,25 @@ Generated: 2026-05-16
 - `SEEDAsymNet`
   - File: `model/seed_asymnet.py`
   - Raw EEG -> internal `DE` features + `DASM/RASM` asymmetry + sparse prior graph fusion
+  - Updated to use sample-adaptive dynamic graphs instead of one batch-shared graph
+- `SEEDBandGraphNet`
+  - File: `model/seed_bandgraph.py`
+  - Raw EEG -> per-band graph encoders + per-band asymmetry modeling + band-attention fusion
 - `0_run_train.py`
   - Added `--output_root` so all task artifacts can be grouped under one result subdirectory
   - Added supervised `--amp` and `--grad_accum_steps`
   - Added `EmotionDL` flags and `RGNN` graph-control flags
   - Added `SEEDGraphormer` flags
   - Added `SEEDAsymNet` flags
+  - Added `SEEDBandGraphNet` flags
 - `trainer.py`
   - Added support for model outputs carrying intermediate features
   - Added soft-target EmotionDL training path
   - Supervised runs now auto-write `summary.txt`
   - AMP path now prefers the newer `torch.amp` API when available
+- `tools/generate_run_summary.py`
+  - Recover `summary.txt` from a run directory
+  - Or build a standalone summary directly from a raw `run.log`
 
 ## Experiments
 
@@ -99,19 +107,19 @@ Additional takeaway from the newest iteration:
 
 If continuing on a GPU machine, the most promising next move is:
 
-1. run the new `SEEDAsymNet` baseline at full scale on GPU
-2. run `SEEDAsymNet + EmotionDL` as the main follow-up
-3. keep `RGNN + EmotionDL` only as a lighter graph reference
+1. run the new `SEEDBandGraphNet` baseline at full scale on GPU
+2. run `SEEDBandGraphNet + EmotionDL` as the main follow-up
+3. keep `SEEDAsymNet + EmotionDL` as the nearest lower-risk fallback
 4. only use `sub_1.h5` as an unlabeled pretraining source unless the SEED label protocol is explicitly verified
 
 ## GPU-Ready Schemes Implemented
 
 The two recommended schemes now implemented in the repo are:
 
-1. `SEEDAsymNet`
-   - a more literature-aligned SEED model that fuses internal `DE`, hemispheric asymmetry, and sparse graph reasoning
-2. `SEEDAsymNet + EmotionDL`
-   - adds label-distribution learning on top of the fused SEED-specific embedding
+1. `SEEDBandGraphNet`
+   - a more expressive SEED model with per-band graph reasoning, asymmetry cues, and band-attention fusion
+2. `SEEDBandGraphNet + EmotionDL`
+   - adds label-distribution learning on top of the multi-band fused embedding
 
 ## Smoke Verification
 
@@ -129,6 +137,12 @@ Minimal 1-epoch CPU smoke tests completed successfully:
   - `Results/SEED_codex_claude_20260516/smoke_asym/SEED_SEEDAsymNet_20260516_162505/`
 - SEEDAsymNet + EmotionDL:
   - `Results/SEED_codex_claude_20260516/smoke_asym_emodl/SEED_SEEDAsymNet_20260516_162522/`
+- Updated sample-adaptive SEEDAsymNet + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_asym_samplegraph/SEED_SEEDAsymNet_20260516_163824/`
+- Plain SEEDBandGraphNet:
+  - `Results/SEED_codex_claude_20260516/smoke_bandgraph/SEED_SEEDBandGraphNet_20260516_163751/`
+- SEEDBandGraphNet + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_bandgraph_emodl/SEED_SEEDBandGraphNet_20260516_163950/`
 
 ## Disk Usage
 

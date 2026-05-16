@@ -136,6 +136,20 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             dyn_alpha=args.seedasym_dyn_alpha,
             return_features=args.emotion_dl_alpha > 0,
         )
+    elif args.model == "SEEDBandGraphNet":
+        model = model_cls(
+            chans=channels,
+            num_classes=num_classes,
+            hidden_dim=args.bandgraph_hidden_dim,
+            graph_layers=args.bandgraph_graph_layers,
+            band_hidden=args.bandgraph_band_hidden,
+            asym_hidden=args.bandgraph_asym_hidden,
+            fusion_hidden=args.bandgraph_fusion_hidden,
+            dropout=args.bandgraph_dropout,
+            top_k=args.bandgraph_top_k,
+            dyn_alpha=args.bandgraph_dyn_alpha,
+            return_features=args.emotion_dl_alpha > 0,
+        )
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
 
@@ -332,6 +346,22 @@ def main():
                         help="Top-k sparse neighbors retained by SEEDAsymNet")
     parser.add_argument("--seedasym_dyn_alpha", type=float, default=0.15,
                         help="Weight of dynamic DE-similarity adjacency in SEEDAsymNet")
+    parser.add_argument("--bandgraph_hidden_dim", type=int, default=48,
+                        help="Per-band graph hidden dimension for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_graph_layers", type=int, default=2,
+                        help="Per-band graph layer count for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_band_hidden", type=int, default=96,
+                        help="Per-band fused embedding size for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_asym_hidden", type=int, default=96,
+                        help="Per-band asymmetry hidden size for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_fusion_hidden", type=int, default=192,
+                        help="Classifier hidden size for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_dropout", type=float, default=0.3,
+                        help="Dropout for SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_top_k", type=int, default=10,
+                        help="Top-k sparse neighbors retained by SEEDBandGraphNet")
+    parser.add_argument("--bandgraph_dyn_alpha", type=float, default=0.2,
+                        help="Weight of dynamic DE-similarity adjacency in SEEDBandGraphNet")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
     parser.add_argument("--sr_aug_times", type=int, default=0,
