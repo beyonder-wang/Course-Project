@@ -14,7 +14,8 @@ class Trainer:
                  batch_transform=None, mixup_alpha=0.0, emotion_head=None,
                  emotion_dl_alpha=0.0, emotion_aux_weight=1.0,
                  domain_head=None, domain_adv_weight=0.0,
-                 domain_target_key=None):
+                 domain_target_key=None,
+                 domain_adv_warmup_epochs=0):
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.emotion_head = emotion_head.to(self.device) if emotion_head is not None else None
@@ -34,6 +35,7 @@ class Trainer:
         self.emotion_aux_weight = float(max(0.0, emotion_aux_weight))
         self.domain_adv_weight = float(max(0.0, domain_adv_weight))
         self.domain_target_key = domain_target_key
+        self.domain_adv_warmup_epochs = max(0, int(domain_adv_warmup_epochs))
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
@@ -110,6 +112,13 @@ class Trainer:
         mixed = lam * data + (1.0 - lam) * data[index]
         return mixed, label, label[index], lam, index
 
+    def _get_effective_adv_weight(self, epoch):
+        """Return effective adversarial weight with linear warmup."""
+        if self.domain_adv_warmup_epochs <= 0 or self.domain_adv_weight <= 0:
+            return self.domain_adv_weight
+        warmup_frac = min(1.0, (epoch + 1) / max(1, self.domain_adv_warmup_epochs))
+        return warmup_frac * self.domain_adv_weight
+
     def train(self):
         best_acc = 0.0
         no_improve = 0
@@ -120,6 +129,7 @@ class Trainer:
             train_num = 0
             pending_steps = 0
             self.optimizer.zero_grad(set_to_none=True)
+            effective_adv_weight = self._get_effective_adv_weight(epoch)
 
             for batch in self.train_loader:
                 data, label, metadata = self._unpack_supervised_batch(batch)
@@ -179,7 +189,7 @@ class Trainer:
                             )
                         else:
                             domain_loss = self.criterion(domain_logits, domain_target)
-                        loss = loss + self.domain_adv_weight * domain_loss
+                        loss = loss + effective_adv_weight * domain_loss
 
                 raw_loss = loss.detach().item()
                 scaled_loss = loss / self.grad_accum_steps
