@@ -26,13 +26,9 @@ Results/**
 !Results/**/predictions.txt
 .venv
 Pretrained
+.codex
 # Round 2 derived datasets
 data/SEED_SUB1_DE/*.h5
-data/SEED_SUB1_DE_RANDOM/*.h5
-data/SEED_SUB1_DE_S23v1/*.h5
-data/SEED_SUB1_DE_TRIAL/*.h5
-data/SEED_SUB1_DE_STRAT/*.h5
-data/SEED_BYSUBJ/*.h5
 data/SEED_SUB1_DE_RANDOM/*.h5
 data/SEED_SUB1_DE_S23v1/*.h5
 data/SEED_SUB1_DE_TRIAL/*.h5
