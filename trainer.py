@@ -4,15 +4,18 @@ from contextlib import nullcontext
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, test_loader, lr, epochs,
                  optimizer=None, patience=0, device="cpu", use_amp=False,
                  grad_accum_steps=1, scheduler=None, label_smoothing=0.0,
-                 batch_transform=None, mixup_alpha=0.0):
+                 batch_transform=None, mixup_alpha=0.0, emotion_head=None,
+                 emotion_dl_alpha=0.0, emotion_aux_weight=1.0):
         self.device = torch.device(device)
         self.model = model.to(self.device)
+        self.emotion_head = emotion_head.to(self.device) if emotion_head is not None else None
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
@@ -24,6 +27,8 @@ class Trainer:
         self.scheduler = scheduler
         self.batch_transform = batch_transform
         self.mixup_alpha = float(max(0.0, mixup_alpha))
+        self.emotion_dl_alpha = float(max(0.0, emotion_dl_alpha))
+        self.emotion_aux_weight = float(max(0.0, emotion_aux_weight))
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
@@ -36,6 +41,18 @@ class Trainer:
         self.val_accuracies = []
         self.best_state = None
         self.best_epoch = 0
+
+    def _soft_target_cross_entropy(self, logits, target_probs):
+        log_probs = F.log_softmax(logits, dim=1)
+        return -(target_probs * log_probs).sum(dim=1).mean()
+
+    def _unpack_model_output(self, output):
+        if isinstance(output, dict):
+            logits = output["logits"]
+            features = output.get("features")
+            aux_loss = output.get("aux_loss")
+            return logits, features, aux_loss
+        return output, None, None
 
     def _mixup(self, data, label):
         if self.mixup_alpha <= 0 or data.size(0) < 2:
@@ -66,11 +83,26 @@ class Trainer:
                 autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
                 with autocast_ctx():
                     output = self.model(data)
+                    logits, features, aux_loss = self._unpack_model_output(output)
                     if self.mixup_alpha > 0 and data.size(0) > 1:
-                        loss = lam * self.criterion(output, label_a)
-                        loss = loss + (1.0 - lam) * self.criterion(output, label_b)
+                        loss = lam * self.criterion(logits, label_a)
+                        loss = loss + (1.0 - lam) * self.criterion(logits, label_b)
+                    elif (
+                        self.emotion_head is not None
+                        and self.emotion_dl_alpha > 0
+                        and features is not None
+                    ):
+                        emotion_logits = self.emotion_head(features)
+                        emotion_probs = torch.softmax(emotion_logits, dim=1)
+                        one_hot = F.one_hot(label, num_classes=logits.size(1)).float()
+                        target_probs = (1.0 - self.emotion_dl_alpha) * one_hot
+                        target_probs = target_probs + self.emotion_dl_alpha * emotion_probs.detach()
+                        loss = self._soft_target_cross_entropy(logits, target_probs)
+                        loss = loss + self.emotion_aux_weight * self.criterion(emotion_logits, label)
                     else:
-                        loss = self.criterion(output, label)
+                        loss = self.criterion(logits, label)
+                    if aux_loss is not None:
+                        loss = loss + aux_loss
 
                 raw_loss = loss.detach().item()
                 scaled_loss = loss / self.grad_accum_steps
@@ -117,13 +149,16 @@ class Trainer:
                     autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
                     with autocast_ctx():
                         val_output = self.model(val_data)
-                        val_loss = self.criterion(val_output, val_label)
+                        val_logits, _, aux_loss = self._unpack_model_output(val_output)
+                        val_loss = self.criterion(val_logits, val_label)
+                        if aux_loss is not None:
+                            val_loss = val_loss + aux_loss
 
                     n = val_label.size(0)
                     val_loss_sum += val_loss.item() * n
                     val_num += n
 
-                    val_pred = torch.argmax(val_output, dim=1)
+                    val_pred = torch.argmax(val_logits, dim=1)
                     val_correct += (val_pred == val_label).sum().item()
 
             epoch_val_loss = val_loss_sum / val_num
@@ -183,7 +218,8 @@ class Trainer:
                 autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
                 with autocast_ctx():
                     test_output = self.model(test_data)
-                test_pred = torch.argmax(test_output, dim=1)
+                    test_logits, _, _ = self._unpack_model_output(test_output)
+                test_pred = torch.argmax(test_logits, dim=1)
                 all_test_labels.extend(test_pred.cpu().tolist())
 
         with open(output_path, "w", encoding="utf-8") as f:

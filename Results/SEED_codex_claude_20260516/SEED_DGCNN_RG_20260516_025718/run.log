@@ -1,0 +1,29 @@
+=== Dataset: SEED ===
+Channels: 62, Classes: 3, Time points: 400
+Model: DGCNN_RG | LR: 0.001 | Epochs: 20 | Batch: 64
+Device: cpu
+----------------------------------------
+Epoch [01/20] | Train Loss: 1.1884 | Val Loss: 1.1420 | Val Acc: 0.3400
+Epoch [02/20] | Train Loss: 1.1027 | Val Loss: 1.1101 | Val Acc: 0.3667 *
+Epoch [03/20] | Train Loss: 1.1039 | Val Loss: 1.0821 | Val Acc: 0.4000 *
+Epoch [04/20] | Train Loss: 1.0770 | Val Loss: 1.0845 | Val Acc: 0.4067 *
+Epoch [05/20] | Train Loss: 1.0748 | Val Loss: 1.0808 | Val Acc: 0.3978
+Epoch [06/20] | Train Loss: 1.0623 | Val Loss: 1.0698 | Val Acc: 0.4244 *
+Epoch [07/20] | Train Loss: 1.0673 | Val Loss: 1.0718 | Val Acc: 0.4333 *
+Epoch [08/20] | Train Loss: 1.0486 | Val Loss: 1.0698 | Val Acc: 0.4356 *
+Epoch [09/20] | Train Loss: 1.0430 | Val Loss: 1.0739 | Val Acc: 0.3822
+Epoch [10/20] | Train Loss: 1.0502 | Val Loss: 1.0705 | Val Acc: 0.4156
+Epoch [11/20] | Train Loss: 1.0480 | Val Loss: 1.0757 | Val Acc: 0.4133
+Epoch [12/20] | Train Loss: 1.0533 | Val Loss: 1.0733 | Val Acc: 0.3956
+Epoch [13/20] | Train Loss: 1.0416 | Val Loss: 1.0683 | Val Acc: 0.3889
+Epoch [14/20] | Train Loss: 1.0204 | Val Loss: 1.0727 | Val Acc: 0.3933
+Epoch [15/20] | Train Loss: 1.0404 | Val Loss: 1.0894 | Val Acc: 0.3911
+Epoch [16/20] | Train Loss: 1.0286 | Val Loss: 1.0811 | Val Acc: 0.3867
+
+Early stopping at epoch 16 (patience=8)
+
+----------------------------------------
+Best Val Accuracy: 0.4356 (epoch 8)
+Saved 450 labels to: Results/SEED_codex_claude_20260516\SEED_DGCNN_RG_20260516_025718\predictions.txt
+
+All outputs saved to: Results/SEED_codex_claude_20260516\SEED_DGCNN_RG_20260516_025718/

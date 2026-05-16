@@ -27,7 +27,10 @@ import numpy as np
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
 
-from model import MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose
+from model import (
+    MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose,
+    EmotionDLHead,
+)
 from utils import load_dataset_info, create_dataloaders, resolve_device, start_log, stop_log, write_summary_txt
 from trainer import Trainer
 
@@ -47,7 +50,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     time_point_models = {"EEGNet", "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
                          "EEGNet_KAN", "ShallowConvNet", "ATCNet", "FBCNet",
                          "EEGTCNet", "MICNN"}
-    if args.model in ("SimpleLinear", "SimpleMLP"):
+    if args.model in ("SimpleLinear", "SimpleMLP", "DENet"):
         model = model_cls(
             input_channels=channels, time_points=time_points, num_classes=num_classes
         )
@@ -65,8 +68,29 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
 
+    if args.model == "RGNN":
+        model.top_k = args.rgnn_top_k
+        model.dyn_alpha = args.rgnn_dyn_alpha
+        model.return_features = args.emotion_dl_alpha > 0
+
     optimizer_cls = torch.optim.AdamW if args.weight_decay > 0 else torch.optim.Adam
-    optimizer = optimizer_cls(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    emotion_head = None
+    params = list(model.parameters())
+    if args.emotion_dl_alpha > 0:
+        feature_dim = getattr(model, "feature_dim", None)
+        if feature_dim is None:
+            raise ValueError(
+                f"Model {args.model} does not expose feature_dim for EmotionDL."
+            )
+        emotion_head = EmotionDLHead(
+            feature_dim=feature_dim,
+            num_classes=num_classes,
+            hidden_dim=args.emotion_hidden_dim,
+            dropout=args.emotion_dropout,
+        )
+        params.extend(list(emotion_head.parameters()))
+
+    optimizer = optimizer_cls(params, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = None
     if args.scheduler == "cosine":
         scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
@@ -101,6 +125,11 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         mixup_alpha=args.mixup_alpha,
         patience=args.patience,
         device=args.device,
+        use_amp=args.amp,
+        grad_accum_steps=args.grad_accum_steps,
+        emotion_head=emotion_head,
+        emotion_dl_alpha=args.emotion_dl_alpha,
+        emotion_aux_weight=args.emotion_aux_weight,
     )
 
     history = trainer.train()
@@ -142,6 +171,12 @@ def main():
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
     parser.add_argument("--patience", type=int, default=0, help="Early stopping patience (0 disables)")
     parser.add_argument(
+        "--output_root",
+        type=str,
+        default="Results",
+        help="Root directory for experiment outputs",
+    )
+    parser.add_argument(
         "--fold",
         type=int,
         default=None,
@@ -150,6 +185,10 @@ def main():
     )
     parser.add_argument("--device", type=str, default="cpu",
                         help="Device: cpu, cuda, cuda:0, etc. (auto-fallback to CPU)")
+    parser.add_argument("--amp", action="store_true",
+                        help="Enable mixed-precision training on CUDA")
+    parser.add_argument("--grad_accum_steps", type=int, default=1,
+                        help="Gradient accumulation steps")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
     parser.add_argument("--standardize_inputs", action="store_true",
@@ -174,6 +213,18 @@ def main():
                         help="Channel dropout probability for supervised augmentation")
     parser.add_argument("--aug_time_shift", type=int, default=0,
                         help="Max circular time shift in samples for augmentation")
+    parser.add_argument("--emotion_dl_alpha", type=float, default=0.0,
+                        help="Blend factor for EmotionDL soft targets (0 disables)")
+    parser.add_argument("--emotion_aux_weight", type=float, default=1.0,
+                        help="Weight for the auxiliary EmotionDL classifier loss")
+    parser.add_argument("--emotion_hidden_dim", type=int, default=128,
+                        help="Hidden dimension for the EmotionDL auxiliary head")
+    parser.add_argument("--emotion_dropout", type=float, default=0.1,
+                        help="Dropout for the EmotionDL auxiliary head")
+    parser.add_argument("--rgnn_top_k", type=int, default=8,
+                        help="Top-k sparse neighbors retained by RGNN")
+    parser.add_argument("--rgnn_dyn_alpha", type=float, default=0.15,
+                        help="Weight of dynamic DE-similarity adjacency in RGNN")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
     parser.add_argument("--sr_aug_times", type=int, default=0,
@@ -216,7 +267,7 @@ def main():
         tag = f"{args.dataset}_{args.model}_{timestamp}_fold{args.fold}"
     else:
         tag = f"{args.dataset}_{args.model}_{timestamp}"
-    run_dir = os.path.join("Results", tag)
+    run_dir = os.path.join(args.output_root, tag)
     os.makedirs(run_dir, exist_ok=True)
     tee = start_log(run_dir)
 
@@ -232,6 +283,7 @@ def main():
     print(f"Channels: {channels}, Classes: {num_classes}, Time points: {time_points}")
     print(f"Model: {args.model} | LR: {args.lr} | Epochs: {args.epochs} | Batch: {args.batch_size}")
     print(f"Device: {args.device}")
+    print(f"AMP: {args.amp} | Grad accum: {args.grad_accum_steps}")
     print("-" * 40)
 
     if args.fold == -1:

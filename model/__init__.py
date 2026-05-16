@@ -1,4 +1,4 @@
-from .simple import SimpleLinear, SimpleMLP
+from .simple import SimpleLinear, SimpleMLP, DENet
 from .eegnet import EEGNet
 from .rnn import EEGGRU, EEGLSTM
 from .mamba_model import EEGMamba
@@ -25,11 +25,15 @@ from .fbcnet import FBCNet
 from .tcnet import EEGTCNet
 from .shallownet import ShallowConvNet
 from .atcnet import ATCNet
+from .dgcnn import DGCNN, DGCNN_RG
+from .rgnn import RGNN
+from .emotion_dl import EmotionDLHead
 
 MODEL_DICT = {
     # Original baselines
     "SimpleLinear": SimpleLinear,
     "SimpleMLP": SimpleMLP,
+    "DENet": DENet,
     "EEGNet": EEGNet,
     "EEGGRU": EEGGRU,
     "EEGLSTM": EEGLSTM,
@@ -44,6 +48,9 @@ MODEL_DICT = {
     "EEGNet_SE": EEGNet_SE,
     "EEGNet_SimAM": EEGNet_SimAM,
     "EEGNet_SimAM_SE": EEGNet_SimAM_SE,
+    "DGCNN": DGCNN,
+    "DGCNN_RG": DGCNN_RG,
+    "RGNN": RGNN,
     # Custom motor imagery CNN
     "MICNN": MICNN,
     # FBCNet: multi-band + spatial conv + variance pooling
@@ -58,11 +65,13 @@ MODEL_DICT = {
 
 __all__ = [
     # Supervised baselines
-    "SimpleLinear", "SimpleMLP", "EEGNet", "EEGGRU", "EEGLSTM", "EEGMamba",
+    "SimpleLinear", "SimpleMLP", "DENet", "EEGNet", "EEGGRU", "EEGLSTM", "EEGMamba",
     # KAN classifier variants
     "SimpleMLP_KAN", "EEGLSTM_KAN", "EEGGRU_KAN", "EEGNet_KAN", "EEGMamba_KAN",
     # Attention variants
     "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
+    "DGCNN", "DGCNN_RG", "RGNN",
+    "EmotionDLHead",
     "SEBlock", "SimAM", "SpatialAttention1D",
     # SimCLR encoders
     "SimCLREncoder", "MoESimCLREncoder",
