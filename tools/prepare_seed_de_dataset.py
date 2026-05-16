@@ -242,9 +242,16 @@ def main():
     if not args.allow_partial_match:
         incomplete = {k: v for k, v in coverage.items() if v["missed"] > 0}
         if incomplete:
+            subject_count = len(subject_files)
+            coverage_lines = ", ".join(
+                f"{name}: matched={stats['matched']} missed={stats['missed']}"
+                for name, stats in coverage.items()
+            )
             raise RuntimeError(
-                "Split matching is incomplete. Re-run with --allow_partial_match for inspection, "
-                "or provide the full set of subject files."
+                "Split matching is incomplete. This is usually caused by an incomplete "
+                f"`sub_*.h5` set rather than a Python version issue. Detected {subject_count} "
+                f"subject file(s). Coverage: {coverage_lines}. Re-run with --allow_partial_match "
+                "for inspection, or provide the full set of subject files."
             )
 
     if args.dry_run:
