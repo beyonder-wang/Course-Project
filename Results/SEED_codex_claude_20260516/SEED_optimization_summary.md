@@ -13,7 +13,7 @@ Generated: 2026-05-16
 
 - The report's main recommendation is `DE/LDS spectral features -> graph modeling -> cross-subject alignment`.
 - The repo originally focused on raw-waveform CNN/RNN models and did not include a SEED-oriented DE feature path or graph model.
-- `sub_1.h5` appears to contain subject/trial/segment raw windows, but labels are not directly visible inside the segment groups. Rebuilding a supervised dataset from it now would risk label corruption.
+- `sub_1.h5` has now been verified to contain `session_id`, `trial_id`, and per-segment `label/start_time/end_time` metadata on the `eeg` dataset itself.
 - Because of that, the safest path for this round was:
   1. keep using the verified `train.h5/val.h5/test_x_only.h5` split
   2. add SEED-oriented models inside the current training pipeline
@@ -27,6 +27,8 @@ Generated: 2026-05-16
 - `DGCNN`
   - File: `model/dgcnn.py`
   - Raw EEG -> internal DE features -> learnable graph over channels -> graph classifier
+  - Updated to support `EmotionDL` features on top of the strongest current baseline
+  - Updated `DGCNN_RG` to use sample-adaptive dynamic graphs instead of a batch-averaged graph
 - `RGNN`
   - File: `model/rgnn.py`
   - Raw EEG -> internal DE features -> biologically inspired sparse graph prior + dynamic DE-similarity adjacency
@@ -79,6 +81,8 @@ Summary of completed runs:
 | `RGNN + EmotionDL` | `lr=1e-3`, `epochs=120`, plateau, GPU | 45.11% | 41 | Better than plain RGNN, but still below the best `DGCNN` |
 | `SEEDGraphormer` | `lr=1e-3`, `epochs=120`, plateau, GPU | 39.56% | 4 | Heavy raw-window path, clearly not the best next investment |
 | `SEEDGraphormer + EmotionDL` | `lr=1e-3`, `epochs=120`, plateau, GPU | 43.78% | 55 | EmotionDL helped, but not enough to justify this direction |
+| `SEEDBandGraphNet` | `lr=1e-3`, `epochs=120`, plateau, GPU | 38.67% | 5 | New multi-band graph fusion idea, but the first real GPU runs underperformed badly |
+| `SEEDBandGraphNet` | `lr=1e-3`, `epochs=120`, plateau, GPU | 38.67% | 7 | Repeat run confirmed the direction is weak on the current split |
 
 Best preserved result directory:
 
@@ -107,19 +111,19 @@ Additional takeaway from the newest iteration:
 
 If continuing on a GPU machine, the most promising next move is:
 
-1. run the new `SEEDBandGraphNet` baseline at full scale on GPU
-2. run `SEEDBandGraphNet + EmotionDL` as the main follow-up
+1. run `DGCNN + EmotionDL` at full scale on GPU
+2. run the upgraded sample-adaptive `DGCNN_RG + EmotionDL`
 3. keep `SEEDAsymNet + EmotionDL` as the nearest lower-risk fallback
-4. only use `sub_1.h5` as an unlabeled pretraining source unless the SEED label protocol is explicitly verified
+4. use the now-verified `sub_1.h5` metadata as the future entry point for a more official `DE/LDS`-style pipeline
 
 ## GPU-Ready Schemes Implemented
 
 The two recommended schemes now implemented in the repo are:
 
-1. `SEEDBandGraphNet`
-   - a more expressive SEED model with per-band graph reasoning, asymmetry cues, and band-attention fusion
-2. `SEEDBandGraphNet + EmotionDL`
-   - adds label-distribution learning on top of the multi-band fused embedding
+1. `DGCNN + EmotionDL`
+   - the strongest current baseline in this repo, now upgraded to support soft-target label-distribution training
+2. `DGCNN_RG + EmotionDL`
+   - the dynamic-graph DGCNN path, upgraded from a batch-shared graph to sample-adaptive dynamic graphs
 
 ## Smoke Verification
 
@@ -143,6 +147,17 @@ Minimal 1-epoch CPU smoke tests completed successfully:
   - `Results/SEED_codex_claude_20260516/smoke_bandgraph/SEED_SEEDBandGraphNet_20260516_163751/`
 - SEEDBandGraphNet + EmotionDL:
   - `Results/SEED_codex_claude_20260516/smoke_bandgraph_emodl/SEED_SEEDBandGraphNet_20260516_163950/`
+- DGCNN + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_dgcnn_emodl/SEED_DGCNN_20260516_165205/`
+- DGCNN_RG + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_dgcnnrg_emodl/SEED_DGCNN_RG_20260516_165205/`
+
+## New Data Finding
+
+- `data/SEED/SEED/sub_1.h5` is not just unlabeled raw storage.
+- Each trial group carries `session_id` and `trial_id`.
+- Each segment's `eeg` dataset carries `label`, `segment_id`, `start_time`, `end_time`, and `time_length`.
+- That means the repo now has a verified path toward future session-aware feature caching or `DE/LDS`-style preprocessing, even though only `sub_1.h5` is currently present locally.
 
 ## Disk Usage
 

@@ -157,6 +157,9 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         model.top_k = args.rgnn_top_k
         model.dyn_alpha = args.rgnn_dyn_alpha
         model.return_features = args.emotion_dl_alpha > 0
+    elif args.model in ("DGCNN", "DGCNN_RG"):
+        if hasattr(model, "return_features"):
+            model.return_features = args.emotion_dl_alpha > 0
 
     optimizer_cls = torch.optim.AdamW if args.weight_decay > 0 else torch.optim.Adam
     emotion_head = None

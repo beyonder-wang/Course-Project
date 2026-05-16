@@ -2,20 +2,19 @@
 
 This file records the most promising GPU-ready schemes implemented in this session.
 
-## Recommended Scheme 1: SEEDBandGraphNet
+## Recommended Scheme 1: DGCNN + EmotionDL
 
-Use this as the new primary SEED-specific scheme on the multi-4090 machine.
-It pushes one step closer to the strongest SEED literature pattern under the
-current repo constraints: per-band graph encoders, explicit `DASM/RASM`
-asymmetry, band-attention fusion, and sample-adaptive dynamic graphs.
+Use this as the new primary next run on the multi-4090 machine.
+It keeps us anchored to the strongest empirical baseline we actually observed in
+this repo (`DGCNN`), while finally adding `EmotionDL` on top of it.
 
 ```bash
 python 0_run_train.py \
   --dataset SEED \
-  --model SEEDBandGraphNet \
+  --model DGCNN \
   --device cuda:0 \
   --amp \
-  --batch_size 128 \
+  --batch_size 256 \
   --grad_accum_steps 1 \
   --epochs 120 \
   --patience 25 \
@@ -23,37 +22,32 @@ python 0_run_train.py \
   --weight_decay 1e-4 \
   --scheduler plateau \
   --plateau_patience 10 \
-  --bandgraph_hidden_dim 48 \
-  --bandgraph_graph_layers 2 \
-  --bandgraph_band_hidden 96 \
-  --bandgraph_asym_hidden 96 \
-  --bandgraph_fusion_hidden 192 \
-  --bandgraph_dropout 0.3 \
-  --bandgraph_top_k 10 \
-  --bandgraph_dyn_alpha 0.2 \
+  --emotion_dl_alpha 0.2 \
+  --emotion_aux_weight 0.5 \
+  --emotion_hidden_dim 128 \
+  --emotion_dropout 0.1 \
   --output_root Results/SEED_gpu_runs
 ```
 
 Suggested sweep:
 
 - `lr`: `1e-3`, `5e-4`
-- `bandgraph_hidden_dim`: `48`, `64`
-- `bandgraph_band_hidden`: `96`, `128`
-- `bandgraph_asym_hidden`: `96`, `128`
-- `bandgraph_top_k`: `8`, `10`, `12`
-- `bandgraph_dyn_alpha`: `0.15`, `0.20`, `0.25`
+- `emotion_dl_alpha`: `0.1`, `0.2`, `0.3`
+- `emotion_aux_weight`: `0.3`, `0.5`, `1.0`
+- `batch_size`: `256`, `384`
 
-## Recommended Scheme 2: SEEDBandGraphNet + EmotionDL
+## Recommended Scheme 2: DGCNN_RG + EmotionDL
 
-Use this after the plain `SEEDBandGraphNet` baseline.
+This version upgrades the old `DGCNN_RG` to use sample-adaptive dynamic graphs
+instead of one whole-batch average graph, then adds `EmotionDL`.
 
 ```bash
 python 0_run_train.py \
   --dataset SEED \
-  --model SEEDBandGraphNet \
+  --model DGCNN_RG \
   --device cuda:0 \
   --amp \
-  --batch_size 128 \
+  --batch_size 256 \
   --grad_accum_steps 1 \
   --epochs 120 \
   --patience 25 \
@@ -61,14 +55,6 @@ python 0_run_train.py \
   --weight_decay 1e-4 \
   --scheduler plateau \
   --plateau_patience 10 \
-  --bandgraph_hidden_dim 48 \
-  --bandgraph_graph_layers 2 \
-  --bandgraph_band_hidden 96 \
-  --bandgraph_asym_hidden 96 \
-  --bandgraph_fusion_hidden 192 \
-  --bandgraph_dropout 0.3 \
-  --bandgraph_top_k 10 \
-  --bandgraph_dyn_alpha 0.2 \
   --emotion_dl_alpha 0.2 \
   --emotion_aux_weight 0.5 \
   --emotion_hidden_dim 128 \
@@ -80,6 +66,7 @@ Suggested sweep:
 
 - `emotion_dl_alpha`: `0.1`, `0.2`, `0.3`
 - `emotion_aux_weight`: `0.3`, `0.5`, `1.0`
+- `batch_size`: `256`, `384`
 
 ## Fallback Scheme 1: SEEDAsymNet + EmotionDL
 
@@ -114,7 +101,12 @@ python 0_run_train.py \
   --output_root Results/SEED_gpu_runs
 ```
 
-## Fallback Scheme 2: RGNN + EmotionDL
+## Fallback Scheme 2: SEEDBandGraphNet + EmotionDL
+
+The heavier multi-band fusion path remains implemented, but the first two real
+GPU runs both stalled at `38.67%` best val ACC, so it is no longer first-line.
+
+## Fallback Scheme 3: RGNN + EmotionDL
 
 If you want a graph-only reference with lower memory cost, keep the earlier RGNN path as a fallback:
 
@@ -147,6 +139,13 @@ the simpler graph baselines:
 
 - plain `SEEDGraphormer`: best val ACC `39.56%`
 - `SEEDGraphormer + EmotionDL`: best val ACC `43.78%`
+
+## Data Note
+
+- `data/SEED/SEED/sub_1.h5` has now been confirmed to contain:
+  - `session_id` and `trial_id` on each trial group
+  - `label`, `segment_id`, `start_time`, and `end_time` on each segment's `eeg` dataset
+- This means a future, more official-style SEED pipeline is feasible from local data if we decide to build cached `DE/LDS`-like features or session-aware training data.
 
 ## Practical Notes
 
