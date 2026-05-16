@@ -63,6 +63,9 @@ class Trainer:
         log_probs = F.log_softmax(logits, dim=1)
         return -(target_probs * log_probs).sum(dim=1).mean()
 
+    def _one_hot(self, labels, num_classes, dtype=torch.float32):
+        return F.one_hot(labels, num_classes=num_classes).to(dtype=dtype)
+
     def _unpack_model_output(self, output):
         if isinstance(output, dict):
             logits = output["logits"]
@@ -130,23 +133,35 @@ class Trainer:
                 with self._autocast_context():
                     output = self.model(data)
                     logits, features, aux_loss = self._unpack_model_output(output)
-                    if self.mixup_alpha > 0 and data.size(0) > 1:
+                    mixup_enabled = mix_index is not None and data.size(0) > 1
+                    if mixup_enabled:
+                        hard_target_probs = (
+                            lam * self._one_hot(label_a, num_classes=logits.size(1), dtype=logits.dtype)
+                            + (1.0 - lam) * self._one_hot(label_b, num_classes=logits.size(1), dtype=logits.dtype)
+                        )
                         loss = lam * self.criterion(logits, label_a)
                         loss = loss + (1.0 - lam) * self.criterion(logits, label_b)
-                    elif (
-                        self.emotion_head is not None
-                        and self.emotion_dl_alpha > 0
-                        and features is not None
-                    ):
-                        emotion_logits = self.emotion_head(features)
-                        emotion_probs = torch.softmax(emotion_logits, dim=1)
-                        one_hot = F.one_hot(label, num_classes=logits.size(1)).float()
-                        target_probs = (1.0 - self.emotion_dl_alpha) * one_hot
-                        target_probs = target_probs + self.emotion_dl_alpha * emotion_probs.detach()
-                        loss = self._soft_target_cross_entropy(logits, target_probs)
-                        loss = loss + self.emotion_aux_weight * self.criterion(emotion_logits, label)
                     else:
+                        hard_target_probs = self._one_hot(label, num_classes=logits.size(1), dtype=logits.dtype)
                         loss = self.criterion(logits, label)
+
+                    if self.emotion_head is not None and features is not None:
+                        emotion_logits = self.emotion_head(features)
+                        if self.emotion_dl_alpha > 0:
+                            emotion_probs = torch.softmax(emotion_logits, dim=1)
+                            target_probs = (1.0 - self.emotion_dl_alpha) * hard_target_probs
+                            target_probs = target_probs + self.emotion_dl_alpha * emotion_probs.detach()
+                            loss = self._soft_target_cross_entropy(logits, target_probs)
+
+                        if mixup_enabled:
+                            emotion_aux_loss = lam * self.criterion(emotion_logits, label_a)
+                            emotion_aux_loss = emotion_aux_loss + (1.0 - lam) * self.criterion(
+                                emotion_logits, label_b
+                            )
+                        else:
+                            emotion_aux_loss = self.criterion(emotion_logits, label)
+                        loss = loss + self.emotion_aux_weight * emotion_aux_loss
+
                     if aux_loss is not None:
                         loss = loss + aux_loss
                     if (
