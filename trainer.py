@@ -34,13 +34,25 @@ class Trainer:
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
             model.parameters(), lr=lr
         )
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.use_amp)
+        self.scaler = self._make_grad_scaler()
 
         self.train_losses = []
         self.val_losses = []
         self.val_accuracies = []
         self.best_state = None
         self.best_epoch = 0
+
+    def _make_grad_scaler(self):
+        if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+            return torch.amp.GradScaler("cuda", enabled=self.use_amp)
+        return torch.cuda.amp.GradScaler(enabled=self.use_amp)
+
+    def _autocast_context(self):
+        if not self.use_amp:
+            return nullcontext()
+        if hasattr(torch, "amp") and hasattr(torch.amp, "autocast"):
+            return torch.amp.autocast("cuda")
+        return torch.cuda.amp.autocast()
 
     def _soft_target_cross_entropy(self, logits, target_probs):
         log_probs = F.log_softmax(logits, dim=1)
@@ -80,8 +92,7 @@ class Trainer:
                     data = self.batch_transform(data)
                 data, label_a, label_b, lam = self._mixup(data, label)
 
-                autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
-                with autocast_ctx():
+                with self._autocast_context():
                     output = self.model(data)
                     logits, features, aux_loss = self._unpack_model_output(output)
                     if self.mixup_alpha > 0 and data.size(0) > 1:
@@ -146,8 +157,7 @@ class Trainer:
                     val_data = val_data.to(self.device, non_blocking=True)
                     val_label = val_label.to(self.device, non_blocking=True)
 
-                    autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
-                    with autocast_ctx():
+                    with self._autocast_context():
                         val_output = self.model(val_data)
                         val_logits, _, aux_loss = self._unpack_model_output(val_output)
                         val_loss = self.criterion(val_logits, val_label)
@@ -215,8 +225,7 @@ class Trainer:
         with torch.no_grad():
             for test_data in self.test_loader:
                 test_data = test_data.to(self.device, non_blocking=True)
-                autocast_ctx = torch.cuda.amp.autocast if self.use_amp else nullcontext
-                with autocast_ctx():
+                with self._autocast_context():
                     test_output = self.model(test_data)
                     test_logits, _, _ = self._unpack_model_output(test_output)
                 test_pred = torch.argmax(test_logits, dim=1)

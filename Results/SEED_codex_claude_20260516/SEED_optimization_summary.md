@@ -36,15 +36,20 @@ Generated: 2026-05-16
 - `SEEDGraphormer`
   - File: `model/seed_graphormer.py`
   - Heavy multiband graph-transformer using DE features, sparse graph priors and Transformer encoder layers
+- `SEEDAsymNet`
+  - File: `model/seed_asymnet.py`
+  - Raw EEG -> internal `DE` features + `DASM/RASM` asymmetry + sparse prior graph fusion
 - `0_run_train.py`
   - Added `--output_root` so all task artifacts can be grouped under one result subdirectory
   - Added supervised `--amp` and `--grad_accum_steps`
   - Added `EmotionDL` flags and `RGNN` graph-control flags
   - Added `SEEDGraphormer` flags
+  - Added `SEEDAsymNet` flags
 - `trainer.py`
   - Added support for model outputs carrying intermediate features
   - Added soft-target EmotionDL training path
   - Supervised runs now auto-write `summary.txt`
+  - AMP path now prefers the newer `torch.amp` API when available
 
 ## Experiments
 
@@ -62,6 +67,10 @@ Summary of completed runs:
 | `FBCNet` | `lr=1e-3`, `epochs=20`, plateau | 43.56% | 10 | Better than raw baselines, still well below target |
 | `DGCNN` | `lr=1e-3`, `epochs=100`, plateau, `patience=20` | **45.78%** | 9 | Best result of this round; longer training did not close the gap |
 | `DGCNN_RG` | `lr=1e-3`, `epochs=20`, plateau | 43.56% | 8 | RGNN-inspired dynamic residual adjacency + sparse graph + DropEdge; did not beat plain DGCNN |
+| `RGNN` | `lr=1e-3`, `epochs=120`, plateau, GPU | 42.89% | 18 | User-run full GPU baseline; underperformed plain DGCNN on this split |
+| `RGNN + EmotionDL` | `lr=1e-3`, `epochs=120`, plateau, GPU | 45.11% | 41 | Better than plain RGNN, but still below the best `DGCNN` |
+| `SEEDGraphormer` | `lr=1e-3`, `epochs=120`, plateau, GPU | 39.56% | 4 | Heavy raw-window path, clearly not the best next investment |
+| `SEEDGraphormer + EmotionDL` | `lr=1e-3`, `epochs=120`, plateau, GPU | 43.78% | 55 | EmotionDL helped, but not enough to justify this direction |
 
 Best preserved result directory:
 
@@ -90,18 +99,19 @@ Additional takeaway from the newest iteration:
 
 If continuing on a GPU machine, the most promising next move is:
 
-1. run the new `RGNN` baseline at full scale on GPU
-2. run `RGNN + EmotionDL` as the main follow-up
-3. only use `sub_1.h5` as an unlabeled pretraining source unless the SEED label protocol is explicitly verified
+1. run the new `SEEDAsymNet` baseline at full scale on GPU
+2. run `SEEDAsymNet + EmotionDL` as the main follow-up
+3. keep `RGNN + EmotionDL` only as a lighter graph reference
+4. only use `sub_1.h5` as an unlabeled pretraining source unless the SEED label protocol is explicitly verified
 
 ## GPU-Ready Schemes Implemented
 
 The two recommended schemes now implemented in the repo are:
 
-1. `SEEDGraphormer`
-   - heavier multiband graph-transformer intended to better exploit the available GPU budget
-2. `SEEDGraphormer + EmotionDL`
-   - adds label-distribution learning on top of the heavy graph-transformer embedding
+1. `SEEDAsymNet`
+   - a more literature-aligned SEED model that fuses internal `DE`, hemispheric asymmetry, and sparse graph reasoning
+2. `SEEDAsymNet + EmotionDL`
+   - adds label-distribution learning on top of the fused SEED-specific embedding
 
 ## Smoke Verification
 
@@ -115,6 +125,10 @@ Minimal 1-epoch CPU smoke tests completed successfully:
   - `Results/SEED_codex_claude_20260516/smoke_graphormer/SEED_SEEDGraphormer_20260516_160809/`
 - SEEDGraphormer + EmotionDL:
   - `Results/SEED_codex_claude_20260516/smoke_graphormer_emotion/SEED_SEEDGraphormer_20260516_160953/`
+- Plain SEEDAsymNet:
+  - `Results/SEED_codex_claude_20260516/smoke_asym/SEED_SEEDAsymNet_20260516_162505/`
+- SEEDAsymNet + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_asym_emodl/SEED_SEEDAsymNet_20260516_162522/`
 
 ## Disk Usage
 

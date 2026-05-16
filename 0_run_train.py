@@ -123,6 +123,19 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             dyn_alpha=args.graphormer_dyn_alpha,
             return_features=args.emotion_dl_alpha > 0,
         )
+    elif args.model == "SEEDAsymNet":
+        model = model_cls(
+            chans=channels,
+            num_classes=num_classes,
+            hidden_dim=args.seedasym_hidden_dim,
+            graph_layers=args.seedasym_graph_layers,
+            asym_hidden=args.seedasym_asym_hidden,
+            fusion_hidden=args.seedasym_fusion_hidden,
+            dropout=args.seedasym_dropout,
+            top_k=args.seedasym_top_k,
+            dyn_alpha=args.seedasym_dyn_alpha,
+            return_features=args.emotion_dl_alpha > 0,
+        )
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
 
@@ -305,6 +318,20 @@ def main():
                         help="Top-k sparse neighbors retained by SEEDGraphormer")
     parser.add_argument("--graphormer_dyn_alpha", type=float, default=0.2,
                         help="Weight of dynamic DE-similarity adjacency in SEEDGraphormer")
+    parser.add_argument("--seedasym_hidden_dim", type=int, default=64,
+                        help="Graph hidden dimension for SEEDAsymNet")
+    parser.add_argument("--seedasym_graph_layers", type=int, default=2,
+                        help="Graph layer count for SEEDAsymNet")
+    parser.add_argument("--seedasym_asym_hidden", type=int, default=256,
+                        help="Asymmetry branch hidden size for SEEDAsymNet")
+    parser.add_argument("--seedasym_fusion_hidden", type=int, default=256,
+                        help="Fusion MLP hidden size for SEEDAsymNet")
+    parser.add_argument("--seedasym_dropout", type=float, default=0.3,
+                        help="Dropout for SEEDAsymNet")
+    parser.add_argument("--seedasym_top_k", type=int, default=8,
+                        help="Top-k sparse neighbors retained by SEEDAsymNet")
+    parser.add_argument("--seedasym_dyn_alpha", type=float, default=0.15,
+                        help="Weight of dynamic DE-similarity adjacency in SEEDAsymNet")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
     parser.add_argument("--sr_aug_times", type=int, default=0,
