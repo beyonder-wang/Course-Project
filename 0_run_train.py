@@ -35,6 +35,42 @@ from utils import load_dataset_info, create_dataloaders, resolve_device, start_l
 from trainer import Trainer
 
 
+def _write_supervised_summary(run_dir, config, metrics, fold_label):
+    sections = [
+        ("Configuration", [
+            f"Dataset: {config['dataset']}",
+            f"Model: {config['model']}",
+            f"Fold: {fold_label}",
+            f"Channels: {config['channels']}",
+            f"Classes: {config['num_classes']}",
+            f"Time points: {config['time_points']}",
+            f"Device: {config['device']}",
+            f"AMP: {config.get('amp', False)}",
+            f"Grad accum steps: {config.get('grad_accum_steps', 1)}",
+            f"Learning rate: {config['lr']}",
+            f"Weight decay: {config['weight_decay']}",
+            f"Batch size: {config['batch_size']}",
+            f"Epochs: {config['epochs']}",
+            f"Patience: {config['patience']}",
+            f"Scheduler: {config['scheduler']}",
+        ]),
+        ("Results", [
+            f"Best val accuracy: {metrics['best_val_accuracy']:.4f} (epoch {metrics['best_epoch']})",
+            f"Final val accuracy: {metrics['final_val_accuracy']:.4f}",
+            f"Final train loss: {metrics['train_losses'][-1]:.4f}",
+            f"Final val loss: {metrics['val_losses'][-1]:.4f}",
+        ]),
+        ("Output Files", [
+            f"Model: {os.path.join(run_dir, 'model.pt')}",
+            f"Predictions: {os.path.join(run_dir, 'predictions.txt')}",
+            f"Metrics: {os.path.join(run_dir, 'metrics.json')}",
+            f"Config: {os.path.join(run_dir, 'config.json')}",
+            f"Log: {os.path.join(run_dir, 'run.log')}",
+        ]),
+    ]
+    write_summary_txt(run_dir, sections)
+
+
 def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     """Train on one fold (or original split if fold is None) and save results."""
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -65,6 +101,20 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             model_kwargs["dropout_tcn"] = args.atc_dropout_tcn
             model_kwargs["tcn_depth"] = args.atc_tcn_depth
         model = model_cls(**model_kwargs)
+    elif args.model == "SEEDGraphormer":
+        model = model_cls(
+            chans=channels,
+            num_classes=num_classes,
+            d_model=args.graphormer_dim,
+            depth=args.graphormer_depth,
+            num_heads=args.graphormer_heads,
+            mlp_ratio=args.graphormer_mlp_ratio,
+            dropout=args.graphormer_dropout,
+            attn_dropout=args.graphormer_attn_dropout,
+            top_k=args.graphormer_top_k,
+            dyn_alpha=args.graphormer_dyn_alpha,
+            return_features=args.emotion_dl_alpha > 0,
+        )
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
 
@@ -146,6 +196,11 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     }
     with open(os.path.join(run_dir, "metrics.json"), "w") as f:
         json.dump(metrics, f, indent=2)
+    _write_supervised_summary(run_dir, config=vars(args) | {
+        "channels": channels,
+        "num_classes": num_classes,
+        "time_points": time_points,
+    }, metrics=metrics, fold_label=(fold if fold is not None else "original_split"))
 
     return metrics
 
@@ -225,6 +280,22 @@ def main():
                         help="Top-k sparse neighbors retained by RGNN")
     parser.add_argument("--rgnn_dyn_alpha", type=float, default=0.15,
                         help="Weight of dynamic DE-similarity adjacency in RGNN")
+    parser.add_argument("--graphormer_dim", type=int, default=128,
+                        help="Token dimension for SEEDGraphormer")
+    parser.add_argument("--graphormer_depth", type=int, default=6,
+                        help="Transformer depth for SEEDGraphormer")
+    parser.add_argument("--graphormer_heads", type=int, default=8,
+                        help="Attention heads for SEEDGraphormer")
+    parser.add_argument("--graphormer_mlp_ratio", type=int, default=4,
+                        help="MLP ratio inside SEEDGraphormer transformer blocks")
+    parser.add_argument("--graphormer_dropout", type=float, default=0.3,
+                        help="Dropout for SEEDGraphormer")
+    parser.add_argument("--graphormer_attn_dropout", type=float, default=0.1,
+                        help="Attention dropout for SEEDGraphormer")
+    parser.add_argument("--graphormer_top_k", type=int, default=12,
+                        help="Top-k sparse neighbors retained by SEEDGraphormer")
+    parser.add_argument("--graphormer_dyn_alpha", type=float, default=0.2,
+                        help="Weight of dynamic DE-similarity adjacency in SEEDGraphormer")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
     parser.add_argument("--sr_aug_times", type=int, default=0,
@@ -315,6 +386,33 @@ def main():
         }
         with open(os.path.join(run_dir, "cv_summary.json"), "w") as f:
             json.dump(cv_summary, f, indent=2)
+        write_summary_txt(run_dir, [
+            ("Configuration", [
+                f"Dataset: {config['dataset']}",
+                f"Model: {config['model']}",
+                "Fold: all_folds",
+                f"Channels: {config['channels']}",
+                f"Classes: {config['num_classes']}",
+                f"Time points: {config['time_points']}",
+                f"Device: {config['device']}",
+                f"AMP: {config.get('amp', False)}",
+                f"Grad accum steps: {config.get('grad_accum_steps', 1)}",
+                f"Learning rate: {config['lr']}",
+                f"Batch size: {config['batch_size']}",
+                f"Epochs: {config['epochs']}",
+            ]),
+            ("Cross-Validation Results", [
+                f"Mean final val accuracy: {cv_summary['mean_final_val_accuracy']:.4f}",
+                f"Std final val accuracy: {cv_summary['std_final_val_accuracy']:.4f}",
+                f"Mean best val accuracy: {cv_summary['mean_best_val_accuracy']:.4f}",
+                f"Std best val accuracy: {cv_summary['std_best_val_accuracy']:.4f}",
+            ]),
+            ("Output Files", [
+                f"CV summary: {os.path.join(run_dir, 'cv_summary.json')}",
+                f"Config: {os.path.join(run_dir, 'config.json')}",
+                f"Log: {os.path.join(run_dir, 'run.log')}",
+            ]),
+        ])
 
         print(f"\n{'=' * 40}")
         print("CV Results (5 folds):")

@@ -28,6 +28,7 @@ from .atcnet import ATCNet
 from .dgcnn import DGCNN, DGCNN_RG
 from .rgnn import RGNN
 from .emotion_dl import EmotionDLHead
+from .seed_graphormer import SEEDGraphormer
 
 MODEL_DICT = {
     # Original baselines
@@ -51,6 +52,7 @@ MODEL_DICT = {
     "DGCNN": DGCNN,
     "DGCNN_RG": DGCNN_RG,
     "RGNN": RGNN,
+    "SEEDGraphormer": SEEDGraphormer,
     # Custom motor imagery CNN
     "MICNN": MICNN,
     # FBCNet: multi-band + spatial conv + variance pooling
@@ -70,7 +72,7 @@ __all__ = [
     "SimpleMLP_KAN", "EEGLSTM_KAN", "EEGGRU_KAN", "EEGNet_KAN", "EEGMamba_KAN",
     # Attention variants
     "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
-    "DGCNN", "DGCNN_RG", "RGNN",
+    "DGCNN", "DGCNN_RG", "RGNN", "SEEDGraphormer",
     "EmotionDLHead",
     "SEBlock", "SimAM", "SpatialAttention1D",
     # SimCLR encoders

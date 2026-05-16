@@ -33,13 +33,18 @@ Generated: 2026-05-16
 - `EmotionDL`
   - File: `model/emotion_dl.py`
   - Auxiliary label-distribution head for soft-target training on top of graph embeddings
+- `SEEDGraphormer`
+  - File: `model/seed_graphormer.py`
+  - Heavy multiband graph-transformer using DE features, sparse graph priors and Transformer encoder layers
 - `0_run_train.py`
   - Added `--output_root` so all task artifacts can be grouped under one result subdirectory
   - Added supervised `--amp` and `--grad_accum_steps`
   - Added `EmotionDL` flags and `RGNN` graph-control flags
+  - Added `SEEDGraphormer` flags
 - `trainer.py`
   - Added support for model outputs carrying intermediate features
   - Added soft-target EmotionDL training path
+  - Supervised runs now auto-write `summary.txt`
 
 ## Experiments
 
@@ -93,12 +98,10 @@ If continuing on a GPU machine, the most promising next move is:
 
 The two recommended schemes now implemented in the repo are:
 
-1. `RGNN`
-   - stronger than the earlier lightweight `DGCNN` approximation in method design
-   - uses a sparse biologically inspired prior graph plus dynamic adjacency from DE features
-2. `RGNN + EmotionDL`
-   - adds label-distribution learning on top of the RGNN embedding
-   - more faithful to the SEED literature than plain label smoothing
+1. `SEEDGraphormer`
+   - heavier multiband graph-transformer intended to better exploit the available GPU budget
+2. `SEEDGraphormer + EmotionDL`
+   - adds label-distribution learning on top of the heavy graph-transformer embedding
 
 ## Smoke Verification
 
@@ -108,6 +111,10 @@ Minimal 1-epoch CPU smoke tests completed successfully:
   - `Results/SEED_codex_claude_20260516/smoke_plain/SEED_RGNN_20260516_143911/`
 - RGNN + EmotionDL:
   - `Results/SEED_codex_claude_20260516/smoke_emotion/SEED_RGNN_20260516_143930/`
+- Plain SEEDGraphormer:
+  - `Results/SEED_codex_claude_20260516/smoke_graphormer/SEED_SEEDGraphormer_20260516_160809/`
+- SEEDGraphormer + EmotionDL:
+  - `Results/SEED_codex_claude_20260516/smoke_graphormer_emotion/SEED_SEEDGraphormer_20260516_160953/`
 
 ## Disk Usage
 
