@@ -126,6 +126,8 @@ class RGNN(nn.Module):
         )
 
     def _extract_de_features(self, x):
+        if x.dim() == 3 and x.size(-1) == self.input_features:
+            return x
         band_signals = self.decomp(x)
         de_features = []
         for name in self.decomp.band_names:

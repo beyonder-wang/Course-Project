@@ -29,6 +29,10 @@ Generated: 2026-05-16
   - Raw EEG -> internal DE features -> learnable graph over channels -> graph classifier
   - Updated to support `EmotionDL` features on top of the strongest current baseline
   - Updated `DGCNN_RG` to use sample-adaptive dynamic graphs instead of a batch-averaged graph
+- `tools/prepare_seed_de_dataset.py`
+  - Builds a `SEED_DE` dataset from official-style subject files
+  - Extracts 5-band DE features and applies a lightweight LDS/Kalman smoother within each trial
+  - Re-materializes `train/val/test` by matching raw segments back to the repo split
 - `RGNN`
   - File: `model/rgnn.py`
   - Raw EEG -> internal DE features -> biologically inspired sparse graph prior + dynamic DE-similarity adjacency
@@ -111,19 +115,19 @@ Additional takeaway from the newest iteration:
 
 If continuing on a GPU machine, the most promising next move is:
 
-1. run `DGCNN + EmotionDL` at full scale on GPU
-2. run the upgraded sample-adaptive `DGCNN_RG + EmotionDL`
-3. keep `SEEDAsymNet + EmotionDL` as the nearest lower-risk fallback
-4. use the now-verified `sub_1.h5` metadata as the future entry point for a more official `DE/LDS`-style pipeline
+1. sync the full `data/SEED/SEED/sub_*.h5` set onto the GPU machine
+2. run `python tools/prepare_seed_de_dataset.py --source_glob data/SEED/SEED/sub_*.h5 --split_source_dir data/SEED --target_dir data/SEED_DE`
+3. train `DGCNN + EmotionDL` on `SEED_DE`
+4. train sample-adaptive `DGCNN_RG + EmotionDL` on `SEED_DE`
 
 ## GPU-Ready Schemes Implemented
 
 The two recommended schemes now implemented in the repo are:
 
-1. `DGCNN + EmotionDL`
-   - the strongest current baseline in this repo, now upgraded to support soft-target label-distribution training
-2. `DGCNN_RG + EmotionDL`
-   - the dynamic-graph DGCNN path, upgraded from a batch-shared graph to sample-adaptive dynamic graphs
+1. `SEED_DE + DGCNN + EmotionDL`
+   - the strongest current baseline in this repo, upgraded with smoothed DE input features and soft-target label-distribution training
+2. `SEED_DE + DGCNN_RG + EmotionDL`
+   - the dynamic-graph DGCNN path, upgraded from a batch-shared graph to sample-adaptive dynamic graphs on top of the same DE input
 
 ## Smoke Verification
 
@@ -157,7 +161,11 @@ Minimal 1-epoch CPU smoke tests completed successfully:
 - `data/SEED/SEED/sub_1.h5` is not just unlabeled raw storage.
 - Each trial group carries `session_id` and `trial_id`.
 - Each segment's `eeg` dataset carries `label`, `segment_id`, `start_time`, `end_time`, and `time_length`.
-- That means the repo now has a verified path toward future session-aware feature caching or `DE/LDS`-style preprocessing, even though only `sub_1.h5` is currently present locally.
+- A dry run of `tools/prepare_seed_de_dataset.py` confirms the matching logic works, but only partially on the current machine because just `sub_1.h5` is present locally:
+  - `train.h5`: `60` matched, `840` missed
+  - `val.h5`: `30` matched, `420` missed
+  - `test_x_only.h5`: `30` matched, `420` missed
+- With the full `sub_*.h5` set on the GPU machine, the repo now has a direct path toward session-aware `DE/LDS`-style preprocessing without inventing a new evaluation split.
 
 ## Disk Usage
 

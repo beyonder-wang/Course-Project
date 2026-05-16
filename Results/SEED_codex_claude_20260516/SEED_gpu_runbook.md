@@ -2,15 +2,42 @@
 
 This file records the most promising GPU-ready schemes implemented in this session.
 
-## Recommended Scheme 1: DGCNN + EmotionDL
+## Recommended Pipeline: Build `SEED_DE` First
+
+The highest-value next step is no longer "try another raw-window architecture".
+It is to build an official-style DE-feature dataset from the subject H5 files,
+then rerun the strongest graph baselines on top of those features.
+
+The repo now includes:
+
+```bash
+python tools/prepare_seed_de_dataset.py \
+  --source_glob data/SEED/SEED/sub_*.h5 \
+  --split_source_dir data/SEED \
+  --target_dir data/SEED_DE
+```
+
+Notes:
+
+- This script extracts 5-band DE features from each official segment.
+- It applies a simple 1D LDS/Kalman smoother within each trial sequence.
+- It matches the resulting features back onto the current `train/val/test` split by raw-segment hash.
+- Locally, only `sub_1.h5` is present, so a dry run currently reports partial coverage:
+  - `train.h5`: `60` matched, `840` missed
+  - `val.h5`: `30` matched, `420` missed
+  - `test_x_only.h5`: `30` matched, `420` missed
+- On the GPU machine, after syncing the full `sub_*.h5` set, rerun the command above without `--dry_run`.
+
+## Recommended Scheme 1: `SEED_DE` + DGCNN + EmotionDL
 
 Use this as the new primary next run on the multi-4090 machine.
 It keeps us anchored to the strongest empirical baseline we actually observed in
-this repo (`DGCNN`), while finally adding `EmotionDL` on top of it.
+this repo (`DGCNN`), while upgrading the input from raw windows to smoothed
+DE features and adding `EmotionDL` on top of it.
 
 ```bash
 python 0_run_train.py \
-  --dataset SEED \
+  --dataset SEED_DE \
   --model DGCNN \
   --device cuda:0 \
   --amp \
@@ -36,14 +63,14 @@ Suggested sweep:
 - `emotion_aux_weight`: `0.3`, `0.5`, `1.0`
 - `batch_size`: `256`, `384`
 
-## Recommended Scheme 2: DGCNN_RG + EmotionDL
+## Recommended Scheme 2: `SEED_DE` + DGCNN_RG + EmotionDL
 
 This version upgrades the old `DGCNN_RG` to use sample-adaptive dynamic graphs
 instead of one whole-batch average graph, then adds `EmotionDL`.
 
 ```bash
 python 0_run_train.py \
-  --dataset SEED \
+  --dataset SEED_DE \
   --model DGCNN_RG \
   --device cuda:0 \
   --amp \
@@ -145,7 +172,7 @@ the simpler graph baselines:
 - `data/SEED/SEED/sub_1.h5` has now been confirmed to contain:
   - `session_id` and `trial_id` on each trial group
   - `label`, `segment_id`, `start_time`, and `end_time` on each segment's `eeg` dataset
-- This means a future, more official-style SEED pipeline is feasible from local data if we decide to build cached `DE/LDS`-like features or session-aware training data.
+- The repo now has the code to build cached `DE/LDS`-like features from those files once the full subject set is present locally.
 
 ## Practical Notes
 

@@ -250,7 +250,7 @@ def main():
         "--dataset",
         type=str,
         default="BCIC2A",
-        choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SLEEP"],
+        choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SEED_DE", "SLEEP"],
         help="Dataset name",
     )
     parser.add_argument(
