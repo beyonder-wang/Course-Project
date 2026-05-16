@@ -280,3 +280,114 @@ The highest-value next experiment is now:
 
 This is a method change, not just a hyperparameter tweak: it directly targets the
 very strong domain signal observed in Round 2.
+
+---
+
+## Round 4: Session 2026-05-16 (Night) — Domain-Adversarial GPU Experiments
+
+### Configuration
+
+All runs: `Results/SEED_gpu_runs/`, 4× GPU, AMP enabled.
+
+### Primary Line A: SEED_BYSUBJ (Cross-Subject 12→3) + DGCNN + Subject-Adversarial
+
+| Run | Config | Best Val ACC | Best Epoch | Notes |
+|-----|--------|-------------:|-----------:|-------|
+| `...081543` | No adv, mixup=0.3, ls=0.1 | 35.93% | 14 | Non-adversarial baseline |
+| `...082325` | adv=0.3, mixup=0.3, ls=0.1 | 39.26% | 29 | Subject-adversarial helps |
+| `...082807` | adv=0.3, mixup=0.5, ls=0.1 | 40.00% | 33 | Higher mixup helps |
+| `...083426` | adv=0.5, mixup=0.5, ls=0.1 | 40.37% | 56 | Higher adv weight helps |
+| **`...083701`** | **adv=0.5, mixup=0.5, ls=0.1, EmotionDL α=0.2** | **42.22%** | 44 | **BEST: +6.29% over baseline** |
+| `...083359` | DGCNN_RG, adv=0.3, mixup=0.5, ls=0.1 | 37.41% | 10 | DGCNN_RG worse than plain DGCNN |
+
+**Subject-adversarial weight sweep (mixup=0.3, ls=0.1):**
+| adv_weight | Best Val ACC |
+|-----------|-------------:|
+| 0 (off) | 35.93% |
+| 0.1 | 37.78% |
+| 0.2 | 38.89% |
+| 0.3 | 39.26% |
+| 0.5 | — (with mixup=0.5 → 40.37%) |
+| 1.0 | 38.89% (too strong, deleted) |
+
+**Mixup sweep (adv=0.3, ls=0.1):**
+| mixup_alpha | Best Val ACC |
+|------------|-------------:|
+| 0.2 | 39.63% |
+| 0.3 | 39.26% |
+| 0.5 | 40.00% |
+
+**Other sweeps (adv=0.3/0.5, mixup=0.5):**
+- label_smoothing=0.05: 39.63% (worse than 0.1)
+- batch_size=384: 38.52% (worse than 256)
+
+### Primary Line B: SEED_SUB1_DE (Single-Subject, Cross-Session S12→3) + DGCNN + Session-Adversarial
+
+| Run | Config | Best Val ACC | Best Epoch | Notes |
+|-----|--------|-------------:|-----------:|-------|
+| `...081609` | No adv, mixup=0.3, ls=0.1 | 54.42% | 3 | Non-adversarial baseline |
+| `...081143` | adv=0.2 (session_id), mixup=0.3, ls=0.1 | 54.49% | 3 | Session-adversarial **no help** |
+| `...083946` | No adv, lr=5e-4, wd=1e-3, mixup=0.5 | 51.16% | 3 | Overfitting persists |
+
+**Key finding:** Session-adversarial does not help on single-subject data (only 2 sessions in train = 2 domain classes). The model overfits severely — best epoch is always 3, then degrades.
+
+### Best Non-Adversarial SEED_SUB1_DE (from Round 2)
+| Run | Config | Best Val ACC |
+|-----|--------|-------------:|
+| Round 2 | DGCNN + Mixup + LS + Aug, seed=123 | **57.14%** |
+
+This remains the best single-subject result. Session-adversarial was not tried there since the data lacked session_id metadata at that time.
+
+### Key Findings
+
+1. **Subject-adversarial training is the most impactful method change on cross-subject SEED_BYSUBJ**: +6.29% absolute improvement (35.93% → 42.22%) from combining adversarial + mixup + EmotionDL.
+2. **Higher adversarial weight (0.5) beats lower (0.1-0.3)**: The adversarial loss acts as a strong regularizer, preventing overfitting on the small 1080-sample training set.
+3. **EmotionDL adds further regularization**: +1.85% on top of the best non-EmotionDL config.
+4. **DGCNN_RG is consistently worse than DGCNN**: Confirmed on both original SEED (Round 1) and SEED_BYSUBJ (Round 4).
+5. **Session-adversarial on single-subject data is ineffective**: Only 2 session domains in training; the model already overfits severely regardless.
+6. **SEED_BYSUBJ with adversarial still far below paper-level results** (~42% vs 85%+): The 12-subject training set is too small; need the full 15-subject DE+LDS pipeline.
+
+### Best Current Command
+
+```bash
+python 0_run_train.py \
+  --dataset SEED_BYSUBJ \
+  --model DGCNN \
+  --device cuda:0 \
+  --amp \
+  --batch_size 256 \
+  --epochs 120 \
+  --patience 25 \
+  --lr 1e-3 \
+  --weight_decay 1e-4 \
+  --scheduler plateau \
+  --plateau_patience 10 \
+  --mixup_alpha 0.5 \
+  --label_smoothing 0.1 \
+  --subject_adv_weight 0.5 \
+  --subject_adv_key subject_id \
+  --subject_adv_hidden_dim 128 \
+  --subject_adv_dropout 0.1 \
+  --emotion_dl_alpha 0.2 \
+  --emotion_aux_weight 0.5 \
+  --emotion_hidden_dim 128 \
+  --emotion_dropout 0.1 \
+  --output_root Results/SEED_gpu_runs
+```
+
+### Next Single Method Change to Try
+
+**Multi-subject DE+LDS with subject-adversarial**: Obtain the full `sub_2.h5` ~ `sub_15.h5` files, build `SEED_DE` with all 15 subjects, then apply the best adversarial + EmotionDL recipe on the full DE+LDS feature set. This should be substantially higher-value than further tuning on the 12-subject raw-EEG SEED_BYSUBJ.
+
+### Kept Run Directories
+
+Under `Results/SEED_gpu_runs/`:
+- `SEED_BYSUBJ_DGCNN_20260516_081543/` — Non-adversarial baseline
+- `SEED_BYSUBJ_DGCNN_20260516_082325/` — adv=0.3 sweep anchor
+- `SEED_BYSUBJ_DGCNN_20260516_082807/` — mixup=0.5 discovery
+- `SEED_BYSUBJ_DGCNN_20260516_083426/` — adv=0.5 sweet spot
+- `SEED_BYSUBJ_DGCNN_20260516_083701/` — **BEST: EmotionDL + adversarial**
+- `SEED_BYSUBJ_DGCNN_RG_20260516_083359/` — DGCNN_RG negative result
+- `SEED_SUB1_DE_DGCNN_20260516_081143/` — Session-adversarial (no help)
+- `SEED_SUB1_DE_DGCNN_20260516_081609/` — Non-adversarial SUB1_DE baseline
+- `SEED_SUB1_DE_DGCNN_20260516_083946/` — Lower lr/higher wd attempt
