@@ -19,13 +19,22 @@ import numpy as np
 from sklearn.model_selection import StratifiedKFold
 
 
+def _load_h5(path):
+    with h5py.File(path, "r") as f:
+        return {key: f[key][()] for key in f.keys()}
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate k-fold CV splits")
     parser.add_argument(
         "--dataset",
         type=str,
         required=True,
-        choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SLEEP"],
+        choices=[
+            "MDD", "BCIC2A", "CHINESE", "SEED", "SEED_DE", "SEED_BYSUBJ",
+            "SEED_SUB1_DE", "SEED_SUB1_DE_RANDOM", "SEED_SUB1_DE_TRIAL",
+            "SEED_SUB1_DE_S23v1", "SEED_SUB1_DE_STRAT", "SLEEP",
+        ],
         help="Dataset name",
     )
     parser.add_argument("--n_folds", type=int, default=5, help="Number of folds")
@@ -39,12 +48,12 @@ def main():
 
     # --- Load and merge train + val ---
     print(f"Loading {args.dataset}...")
-    with h5py.File(train_path, "r") as f:
-        X_train = f["X"][()]
-        y_train = f["y"][()]
-    with h5py.File(val_path, "r") as f:
-        X_val = f["X"][()]
-        y_val = f["y"][()]
+    train_data = _load_h5(train_path)
+    val_data = _load_h5(val_path)
+    X_train = train_data["X"]
+    y_train = train_data["y"]
+    X_val = val_data["X"]
+    y_val = val_data["y"]
 
     X_all = np.concatenate([X_train, X_val], axis=0)
     y_all = np.concatenate([y_train, y_val], axis=0)
@@ -55,6 +64,20 @@ def main():
     with h5py.File(all_path, "w") as f:
         f.create_dataset("X", data=X_all, dtype="float32")
         f.create_dataset("y", data=y_all, dtype="int64")
+        for key, train_values in train_data.items():
+            if key in ("X", "y") or key not in val_data:
+                continue
+            val_values = val_data[key]
+            if (
+                hasattr(train_values, "shape")
+                and hasattr(val_values, "shape")
+                and len(train_values.shape) > 0
+                and len(val_values.shape) > 0
+                and train_values.shape[0] == len(X_train)
+                and val_values.shape[0] == len(X_val)
+            ):
+                merged = np.concatenate([train_values, val_values], axis=0)
+                f.create_dataset(key, data=merged)
     print(f"  Saved: {all_path}")
 
     # --- Generate stratified folds ---

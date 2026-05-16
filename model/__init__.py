@@ -28,6 +28,7 @@ from .atcnet import ATCNet
 from .dgcnn import DGCNN, DGCNN_RG
 from .rgnn import RGNN
 from .emotion_dl import EmotionDLHead
+from .domain_adversarial import DomainAdversarialHead
 from .seed_graphormer import SEEDGraphormer
 from .seed_asymnet import SEEDAsymNet
 from .seed_bandgraph import SEEDBandGraphNet
@@ -77,7 +78,7 @@ __all__ = [
     # Attention variants
     "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
     "DGCNN", "DGCNN_RG", "RGNN", "SEEDGraphormer", "SEEDAsymNet", "SEEDBandGraphNet",
-    "EmotionDLHead",
+    "EmotionDLHead", "DomainAdversarialHead",
     "SEBlock", "SimAM", "SpatialAttention1D",
     # SimCLR encoders
     "SimCLREncoder", "MoESimCLREncoder",

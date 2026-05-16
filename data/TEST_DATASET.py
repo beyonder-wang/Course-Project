@@ -4,6 +4,37 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 
+_META_SKIP_KEYS = {"X", "y"}
+
+
+def _load_metadata_tensors(h5_file, expected_len):
+    metadata = {}
+    metadata_cardinalities = {}
+
+    for key in h5_file.keys():
+        if key in _META_SKIP_KEYS:
+            continue
+
+        values = h5_file[key][()]
+        if not hasattr(values, "shape") or len(values.shape) == 0:
+            continue
+        if values.shape[0] != expected_len:
+            continue
+
+        if key.endswith("_id") and np.issubdtype(values.dtype, np.integer):
+            unique_values = np.unique(values)
+            remap = {int(v): idx for idx, v in enumerate(unique_values.tolist())}
+            encoded = np.asarray([remap[int(v)] for v in values], dtype=np.int64)
+            metadata[key] = torch.tensor(encoded, dtype=torch.long)
+            metadata_cardinalities[key] = len(unique_values)
+        elif np.issubdtype(values.dtype, np.integer):
+            metadata[key] = torch.tensor(values, dtype=torch.long)
+        else:
+            metadata[key] = torch.tensor(values, dtype=torch.float32)
+
+    return metadata, metadata_cardinalities
+
+
 # --- Train: reads X and y ---
 class TrainDataset(Dataset):
     def __init__(self, h5_path, transform=None):
@@ -12,6 +43,9 @@ class TrainDataset(Dataset):
         with h5py.File(self.h5_path, "r") as f:
             self.x = torch.tensor(f["X"][()], dtype=torch.float32)
             self.y = torch.tensor(f["y"][()], dtype=torch.long)
+            self.metadata, self.metadata_cardinalities = _load_metadata_tensors(
+                f, expected_len=len(self.x)
+            )
 
         assert len(self.x) == len(self.y), "X and y length mismatch"
 
@@ -22,6 +56,9 @@ class TrainDataset(Dataset):
         x = self.x[idx]
         if self.transform is not None:
             x = self.transform(x)
+        if self.metadata:
+            meta = {key: values[idx] for key, values in self.metadata.items()}
+            return x, self.y[idx], meta
         return x, self.y[idx]
 
 
@@ -34,6 +71,9 @@ class FoldDataset(Dataset):
         with h5py.File(all_h5_path, "r") as f:
             self.x = torch.tensor(f["X"][()], dtype=torch.float32)
             self.y = torch.tensor(f["y"][()], dtype=torch.long)
+            self.metadata, self.metadata_cardinalities = _load_metadata_tensors(
+                f, expected_len=len(self.x)
+            )
         self.indices = np.load(index_npy_path)
 
     def __len__(self):
@@ -44,6 +84,9 @@ class FoldDataset(Dataset):
         x = self.x[real_idx]
         if self.transform is not None:
             x = self.transform(x)
+        if self.metadata:
+            meta = {key: values[real_idx] for key, values in self.metadata.items()}
+            return x, self.y[real_idx], meta
         return x, self.y[real_idx]
 
 
@@ -68,10 +111,12 @@ class TestDataset(Dataset):
 class MemoryTrainDataset(Dataset):
     """In-memory tensor dataset with optional transform."""
 
-    def __init__(self, x, y, transform=None):
+    def __init__(self, x, y, transform=None, metadata=None, metadata_cardinalities=None):
         self.x = x
         self.y = y
         self.transform = transform
+        self.metadata = metadata or {}
+        self.metadata_cardinalities = metadata_cardinalities or {}
 
     def __len__(self):
         return len(self.x)
@@ -80,6 +125,9 @@ class MemoryTrainDataset(Dataset):
         x = self.x[idx]
         if self.transform is not None:
             x = self.transform(x)
+        if self.metadata:
+            meta = {key: values[idx] for key, values in self.metadata.items()}
+            return x, self.y[idx], meta
         return x, self.y[idx]
 
 

@@ -24,12 +24,14 @@ def _load_split(path, has_labels=True):
     return X, y
 
 
-def _write_split(path, X, y=None):
+def _write_split(path, X, y=None, subject_id=None):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with h5py.File(path, "w") as f:
         f.create_dataset("X", data=X)
         if y is not None:
             f.create_dataset("y", data=y)
+        if subject_id is not None:
+            f.create_dataset("subject_id", data=subject_id)
 
 
 def main():
@@ -57,37 +59,55 @@ def main():
     def _gather_subjects(X, y, subjects, per_subj):
         """Gather segments for given subjects from X (0-indexed subjects)."""
         indices = []
+        subject_ids = []
         for s in subjects:
             start = (s - 1) * per_subj
             end = start + per_subj
             indices.extend(range(start, end))
+            subject_ids.extend([s] * per_subj)
         if y is not None:
-            return X[indices], y[indices]
-        return X[indices], None
+            return X[indices], y[indices], np.asarray(subject_ids, dtype=np.int64)
+        return X[indices], None, np.asarray(subject_ids, dtype=np.int64)
 
     # Build new train set: subjects from train.h5 + val.h5
-    tr_X1, tr_y1 = _gather_subjects(train_X, train_y, args.train_subjects, train_per_subj)
-    tr_X2, tr_y2 = _gather_subjects(val_X, val_y, args.train_subjects, val_per_subj)
+    tr_X1, tr_y1, tr_s1 = _gather_subjects(train_X, train_y, args.train_subjects, train_per_subj)
+    tr_X2, tr_y2, tr_s2 = _gather_subjects(val_X, val_y, args.train_subjects, val_per_subj)
     new_train_X = np.concatenate([tr_X1, tr_X2], axis=0)
     new_train_y = np.concatenate([tr_y1, tr_y2], axis=0)
+    new_train_subject = np.concatenate([tr_s1, tr_s2], axis=0)
 
     # Build new val set
-    vl_X1, vl_y1 = _gather_subjects(train_X, train_y, args.val_subjects, train_per_subj)
-    vl_X2, vl_y2 = _gather_subjects(val_X, val_y, args.val_subjects, val_per_subj)
+    vl_X1, vl_y1, vl_s1 = _gather_subjects(train_X, train_y, args.val_subjects, train_per_subj)
+    vl_X2, vl_y2, vl_s2 = _gather_subjects(val_X, val_y, args.val_subjects, val_per_subj)
     new_val_X = np.concatenate([vl_X1, vl_X2], axis=0)
     new_val_y = np.concatenate([vl_y1, vl_y2], axis=0)
+    new_val_subject = np.concatenate([vl_s1, vl_s2], axis=0)
 
     # Build new test set
-    ts_X, _ = _gather_subjects(test_X, None, args.val_subjects, val_per_subj)
+    ts_X, _, ts_subject = _gather_subjects(test_X, None, args.val_subjects, val_per_subj)
     new_test_X = ts_X
 
     print(f"\nNew train: {new_train_X.shape}, labels={dict(zip(*np.unique(new_train_y, return_counts=True)))}")
     print(f"New val:   {new_val_X.shape}, labels={dict(zip(*np.unique(new_val_y, return_counts=True)))}")
     print(f"New test:  {new_test_X.shape}")
 
-    _write_split(os.path.join(args.target_dir, "train.h5"), new_train_X, new_train_y)
-    _write_split(os.path.join(args.target_dir, "val.h5"), new_val_X, new_val_y)
-    _write_split(os.path.join(args.target_dir, "test_x_only.h5"), new_test_X)
+    _write_split(
+        os.path.join(args.target_dir, "train.h5"),
+        new_train_X,
+        new_train_y,
+        subject_id=new_train_subject,
+    )
+    _write_split(
+        os.path.join(args.target_dir, "val.h5"),
+        new_val_X,
+        new_val_y,
+        subject_id=new_val_subject,
+    )
+    _write_split(
+        os.path.join(args.target_dir, "test_x_only.h5"),
+        new_test_X,
+        subject_id=ts_subject,
+    )
 
     # Copy dataset_info.json
     src_info = os.path.join(args.data_dir, "dataset_info.json")

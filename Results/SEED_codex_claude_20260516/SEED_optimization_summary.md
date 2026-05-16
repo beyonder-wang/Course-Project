@@ -247,3 +247,36 @@ Verified by:
 2. Run `prepare_seed_de_dataset.py` on full subject set → `SEED_DE`
 3. Train `DGCNN + EmotionDL` on `SEED_DE` with cross-subject LOSO or folds
 4. Implement domain-adversarial head (NodeDAT-style) leveraging the strong subject signal
+
+---
+
+## Round 3: Session 2026-05-16 (Evening) - Subject-Adversarial Training Plumbing
+
+### New Code Added
+
+| File | Purpose |
+|------|---------|
+| `model/domain_adversarial.py` | Gradient-reversal domain head for subject/session adversarial training |
+| `data/TEST_DATASET.py` | Load optional H5 metadata such as `subject_id` / `session_id` and carry it through DataLoader batches |
+| `trainer.py` | Combine classification loss with adversarial domain loss during supervised training |
+| `0_run_train.py` | Add CLI flags for adversarial training and auto-enable feature-return mode for supported models |
+| `prepare_folds.py` | Preserve metadata arrays when creating `all.h5` so 5-fold CV can still access domain labels |
+| `tools/split_seed_by_subject.py` | Write `subject_id` into `SEED_BYSUBJ` train/val/test files |
+
+### New CLI Flags
+
+- `--subject_adv_weight`
+- `--subject_adv_key`
+- `--subject_adv_hidden_dim`
+- `--subject_adv_dropout`
+- `--subject_adv_grl_lambda`
+
+### Current Recommendation
+
+The highest-value next experiment is now:
+
+1. `SEED_BYSUBJ + DGCNN + Mixup + Label Smoothing + subject-adversarial`
+2. `SEED_SUB1_DE + DGCNN + Mixup + Label Smoothing + session-adversarial`
+
+This is a method change, not just a hyperparameter tweak: it directly targets the
+very strong domain signal observed in Round 2.

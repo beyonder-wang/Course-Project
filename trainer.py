@@ -12,10 +12,13 @@ class Trainer:
                  optimizer=None, patience=0, device="cpu", use_amp=False,
                  grad_accum_steps=1, scheduler=None, label_smoothing=0.0,
                  batch_transform=None, mixup_alpha=0.0, emotion_head=None,
-                 emotion_dl_alpha=0.0, emotion_aux_weight=1.0):
+                 emotion_dl_alpha=0.0, emotion_aux_weight=1.0,
+                 domain_head=None, domain_adv_weight=0.0,
+                 domain_target_key=None):
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.emotion_head = emotion_head.to(self.device) if emotion_head is not None else None
+        self.domain_head = domain_head.to(self.device) if domain_head is not None else None
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.test_loader = test_loader
@@ -29,6 +32,8 @@ class Trainer:
         self.mixup_alpha = float(max(0.0, mixup_alpha))
         self.emotion_dl_alpha = float(max(0.0, emotion_dl_alpha))
         self.emotion_aux_weight = float(max(0.0, emotion_aux_weight))
+        self.domain_adv_weight = float(max(0.0, domain_adv_weight))
+        self.domain_target_key = domain_target_key
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
@@ -66,13 +71,41 @@ class Trainer:
             return logits, features, aux_loss
         return output, None, None
 
+    def _unpack_supervised_batch(self, batch):
+        if not isinstance(batch, (list, tuple)):
+            raise TypeError(f"Unexpected batch type: {type(batch)!r}")
+        if len(batch) == 2:
+            data, label = batch
+            metadata = {}
+        elif len(batch) == 3:
+            data, label, metadata = batch
+        else:
+            raise ValueError(f"Expected 2 or 3 batch items, got {len(batch)}")
+        if metadata is None:
+            metadata = {}
+        return data, label, metadata
+
+    def _extract_domain_target(self, metadata):
+        if (
+            self.domain_head is None
+            or self.domain_adv_weight <= 0
+            or not self.domain_target_key
+            or not isinstance(metadata, dict)
+        ):
+            return None
+
+        target = metadata.get(self.domain_target_key)
+        if target is None:
+            return None
+        return target.to(self.device, non_blocking=True).long()
+
     def _mixup(self, data, label):
         if self.mixup_alpha <= 0 or data.size(0) < 2:
-            return data, label, label, 1.0
+            return data, label, label, 1.0, None
         lam = float(np.random.beta(self.mixup_alpha, self.mixup_alpha))
         index = torch.randperm(data.size(0), device=data.device)
         mixed = lam * data + (1.0 - lam) * data[index]
-        return mixed, label, label[index], lam
+        return mixed, label, label[index], lam, index
 
     def train(self):
         best_acc = 0.0
@@ -85,12 +118,14 @@ class Trainer:
             pending_steps = 0
             self.optimizer.zero_grad(set_to_none=True)
 
-            for data, label in self.train_loader:
+            for batch in self.train_loader:
+                data, label, metadata = self._unpack_supervised_batch(batch)
                 data = data.to(self.device, non_blocking=True)
                 label = label.to(self.device, non_blocking=True)
+                domain_target = self._extract_domain_target(metadata)
                 if self.batch_transform is not None:
                     data = self.batch_transform(data)
-                data, label_a, label_b, lam = self._mixup(data, label)
+                data, label_a, label_b, lam, mix_index = self._mixup(data, label)
 
                 with self._autocast_context():
                     output = self.model(data)
@@ -114,6 +149,22 @@ class Trainer:
                         loss = self.criterion(logits, label)
                     if aux_loss is not None:
                         loss = loss + aux_loss
+                    if (
+                        self.domain_head is not None
+                        and self.domain_adv_weight > 0
+                        and features is not None
+                        and domain_target is not None
+                    ):
+                        domain_logits = self.domain_head(features)
+                        if mix_index is not None and domain_target.size(0) > 1:
+                            domain_target_b = domain_target[mix_index]
+                            domain_loss = lam * self.criterion(domain_logits, domain_target)
+                            domain_loss = domain_loss + (1.0 - lam) * self.criterion(
+                                domain_logits, domain_target_b
+                            )
+                        else:
+                            domain_loss = self.criterion(domain_logits, domain_target)
+                        loss = loss + self.domain_adv_weight * domain_loss
 
                 raw_loss = loss.detach().item()
                 scaled_loss = loss / self.grad_accum_steps
@@ -153,7 +204,8 @@ class Trainer:
             val_num = 0
 
             with torch.no_grad():
-                for val_data, val_label in self.val_loader:
+                for batch in self.val_loader:
+                    val_data, val_label, _ = self._unpack_supervised_batch(batch)
                     val_data = val_data.to(self.device, non_blocking=True)
                     val_label = val_label.to(self.device, non_blocking=True)
 

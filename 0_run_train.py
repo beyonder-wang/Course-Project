@@ -29,7 +29,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
 
 from model import (
     MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose,
-    EmotionDLHead,
+    EmotionDLHead, DomainAdversarialHead,
 )
 from utils import load_dataset_info, create_dataloaders, resolve_device, start_log, stop_log, write_summary_txt
 from trainer import Trainer
@@ -53,6 +53,11 @@ def _write_supervised_summary(run_dir, config, metrics, fold_label):
             f"Epochs: {config['epochs']}",
             f"Patience: {config['patience']}",
             f"Scheduler: {config['scheduler']}",
+            f"Label smoothing: {config.get('label_smoothing', 0.0)}",
+            f"Mixup alpha: {config.get('mixup_alpha', 0.0)}",
+            f"EmotionDL alpha: {config.get('emotion_dl_alpha', 0.0)}",
+            f"Subject adv weight: {config.get('subject_adv_weight', 0.0)}",
+            f"Subject adv key: {config.get('subject_adv_key', 'subject_id')}",
         ]),
         ("Results", [
             f"Best val accuracy: {metrics['best_val_accuracy']:.4f} (epoch {metrics['best_epoch']})",
@@ -79,6 +84,21 @@ def _make_run_config(args, channels, num_classes, time_points):
     return config
 
 
+def _needs_feature_outputs(args):
+    return args.emotion_dl_alpha > 0 or args.subject_adv_weight > 0
+
+
+def _resolve_metadata_cardinality(dataset, key):
+    cardinalities = getattr(dataset, "metadata_cardinalities", None) or {}
+    if key in cardinalities:
+        return int(cardinalities[key])
+
+    metadata = getattr(dataset, "metadata", None) or {}
+    if key in metadata:
+        return int(torch.unique(metadata[key]).numel())
+    return None
+
+
 def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     """Train on one fold (or original split if fold is None) and save results."""
     train_loader, val_loader, test_loader = create_dataloaders(
@@ -89,6 +109,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         sr_aug_times=args.sr_aug_times,
         sr_segments=args.sr_segments,
     )
+    needs_features = _needs_feature_outputs(args)
 
     model_cls = MODEL_DICT[args.model]
     time_point_models = {"EEGNet", "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
@@ -121,7 +142,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             attn_dropout=args.graphormer_attn_dropout,
             top_k=args.graphormer_top_k,
             dyn_alpha=args.graphormer_dyn_alpha,
-            return_features=args.emotion_dl_alpha > 0,
+            return_features=needs_features,
         )
     elif args.model == "SEEDAsymNet":
         model = model_cls(
@@ -134,7 +155,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             dropout=args.seedasym_dropout,
             top_k=args.seedasym_top_k,
             dyn_alpha=args.seedasym_dyn_alpha,
-            return_features=args.emotion_dl_alpha > 0,
+            return_features=needs_features,
         )
     elif args.model == "SEEDBandGraphNet":
         model = model_cls(
@@ -148,7 +169,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             dropout=args.bandgraph_dropout,
             top_k=args.bandgraph_top_k,
             dyn_alpha=args.bandgraph_dyn_alpha,
-            return_features=args.emotion_dl_alpha > 0,
+            return_features=needs_features,
         )
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
@@ -156,13 +177,14 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     if args.model == "RGNN":
         model.top_k = args.rgnn_top_k
         model.dyn_alpha = args.rgnn_dyn_alpha
-        model.return_features = args.emotion_dl_alpha > 0
+        model.return_features = needs_features
     elif args.model in ("DGCNN", "DGCNN_RG"):
         if hasattr(model, "return_features"):
-            model.return_features = args.emotion_dl_alpha > 0
+            model.return_features = needs_features
 
     optimizer_cls = torch.optim.AdamW if args.weight_decay > 0 else torch.optim.Adam
     emotion_head = None
+    domain_head = None
     params = list(model.parameters())
     if args.emotion_dl_alpha > 0:
         feature_dim = getattr(model, "feature_dim", None)
@@ -177,6 +199,35 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
             dropout=args.emotion_dropout,
         )
         params.extend(list(emotion_head.parameters()))
+    if args.subject_adv_weight > 0:
+        feature_dim = getattr(model, "feature_dim", None)
+        if feature_dim is None:
+            raise ValueError(
+                f"Model {args.model} does not expose feature_dim for subject-adversarial training."
+            )
+        num_domains = _resolve_metadata_cardinality(
+            train_loader.dataset, args.subject_adv_key
+        )
+        if num_domains is None:
+            raise ValueError(
+                f"Dataset {args.dataset} does not provide metadata key "
+                f"{args.subject_adv_key!r} in the training split. "
+                "Rebuild the dataset/folds with metadata preserved, or disable "
+                "subject-adversarial training."
+            )
+        if num_domains < 2:
+            raise ValueError(
+                f"Metadata key {args.subject_adv_key!r} has only {num_domains} domain(s); "
+                "subject-adversarial training needs at least 2."
+            )
+        domain_head = DomainAdversarialHead(
+            feature_dim=feature_dim,
+            num_domains=num_domains,
+            hidden_dim=args.subject_adv_hidden_dim,
+            dropout=args.subject_adv_dropout,
+            grl_lambda=args.subject_adv_grl_lambda,
+        )
+        params.extend(list(domain_head.parameters()))
 
     optimizer = optimizer_cls(params, lr=args.lr, weight_decay=args.weight_decay)
     scheduler = None
@@ -218,6 +269,9 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         emotion_head=emotion_head,
         emotion_dl_alpha=args.emotion_dl_alpha,
         emotion_aux_weight=args.emotion_aux_weight,
+        domain_head=domain_head,
+        domain_adv_weight=args.subject_adv_weight,
+        domain_target_key=args.subject_adv_key,
     )
 
     history = trainer.train()
@@ -315,6 +369,16 @@ def main():
                         help="Hidden dimension for the EmotionDL auxiliary head")
     parser.add_argument("--emotion_dropout", type=float, default=0.1,
                         help="Dropout for the EmotionDL auxiliary head")
+    parser.add_argument("--subject_adv_weight", type=float, default=0.0,
+                        help="Weight for domain-adversarial loss on subject/session labels")
+    parser.add_argument("--subject_adv_key", type=str, default="subject_id",
+                        help="Metadata key used as domain target, e.g. subject_id or session_id")
+    parser.add_argument("--subject_adv_hidden_dim", type=int, default=128,
+                        help="Hidden dimension for the adversarial domain head")
+    parser.add_argument("--subject_adv_dropout", type=float, default=0.1,
+                        help="Dropout for the adversarial domain head")
+    parser.add_argument("--subject_adv_grl_lambda", type=float, default=1.0,
+                        help="Gradient-reversal strength for domain-adversarial training")
     parser.add_argument("--rgnn_top_k", type=int, default=8,
                         help="Top-k sparse neighbors retained by RGNN")
     parser.add_argument("--rgnn_dyn_alpha", type=float, default=0.15,
@@ -466,6 +530,11 @@ def main():
                 f"Learning rate: {config['lr']}",
                 f"Batch size: {config['batch_size']}",
                 f"Epochs: {config['epochs']}",
+                f"Label smoothing: {config.get('label_smoothing', 0.0)}",
+                f"Mixup alpha: {config.get('mixup_alpha', 0.0)}",
+                f"EmotionDL alpha: {config.get('emotion_dl_alpha', 0.0)}",
+                f"Subject adv weight: {config.get('subject_adv_weight', 0.0)}",
+                f"Subject adv key: {config.get('subject_adv_key', 'subject_id')}",
             ]),
             ("Cross-Validation Results", [
                 f"Mean final val accuracy: {cv_summary['mean_final_val_accuracy']:.4f}",
