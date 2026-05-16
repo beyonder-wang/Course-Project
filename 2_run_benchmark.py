@@ -18,8 +18,9 @@ from datetime import datetime
 
 import numpy as np
 import torch
+import torch.nn as nn
 
-from model import MODEL_DICT, EEGLSTM, ChannelAdapter
+from model import MODEL_DICT, EEGLSTM, ChannelAdapter, MoELayer
 from utils import (
     load_dataset_info, create_dataloaders,
     start_log, stop_log, write_summary_txt,
@@ -63,6 +64,7 @@ def _run_single_train(dataset, model_name, args):
         model=model, train_loader=train_loader, val_loader=val_loader,
         test_loader=test_loader, lr=args.lr, epochs=args.epochs,
         patience=args.patience, device=args.device,
+        use_amp=args.amp, grad_accum_steps=args.grad_accum_steps,
     )
 
     print(f"\n{'='*50}\n  {dataset} | {model_name} | from scratch\n{'='*50}")
@@ -104,6 +106,9 @@ def _run_single_finetune(dataset, args):
         dataset, args.batch_size, fold=args.fold
     )
 
+    encoder_state = torch.load(args.encoder, map_location="cpu")
+    has_moe = any(key.startswith("moe.") for key in encoder_state)
+
     if args.adapter:
         adapter_state = torch.load(args.adapter, map_location="cpu")
         adapter = ChannelAdapter({dataset: channels}, unified_dim=args.unified_dim)
@@ -113,13 +118,27 @@ def _run_single_finetune(dataset, args):
              for k, v in adapter_state.items()
              if k.startswith(f"adapters.{adapter_key}")}
         )
+        input_channels = args.unified_dim
+    else:
+        adapter = None
+        input_channels = channels
 
+    if has_moe:
+        encoder = _build_moe_downstream(
+            chans=input_channels, hidden_dim=args.hidden_dim,
+            num_layers=args.num_layers, num_classes=num_classes,
+            dropout=args.dropout,
+        )
+    else:
         encoder = EEGLSTM(
-            chans=args.unified_dim, hidden_dim=args.hidden_dim,
+            chans=input_channels, hidden_dim=args.hidden_dim,
             num_layers=args.num_layers, num_classes=num_classes,
             dropout=args.dropout, bidirectional=True,
         )
 
+    _load_matching_state(encoder, encoder_state)
+
+    if adapter is not None:
         class FinetuneModel(torch.nn.Module):
             def __init__(self, adapter, encoder, dataset_name):
                 super().__init__()
@@ -133,16 +152,8 @@ def _run_single_finetune(dataset, args):
                 return self.encoder(x)
 
         model = FinetuneModel(adapter, encoder, dataset)
-        encoder_state = torch.load(args.encoder, map_location="cpu")
-        encoder.lstm.load_state_dict(encoder_state)
     else:
-        model = EEGLSTM(
-            chans=channels, hidden_dim=args.hidden_dim,
-            num_layers=args.num_layers, num_classes=num_classes,
-            dropout=args.dropout, bidirectional=True,
-        )
-        state = torch.load(args.encoder, map_location="cpu")
-        model.lstm.load_state_dict(state)
+        model = encoder
 
     classifier_params = []
     encoder_params = []
@@ -161,6 +172,7 @@ def _run_single_finetune(dataset, args):
         model=model, train_loader=train_loader, val_loader=val_loader,
         test_loader=test_loader, lr=args.classifier_lr, epochs=args.epochs,
         optimizer=optimizer, patience=args.patience, device=args.device,
+        use_amp=args.amp, grad_accum_steps=args.grad_accum_steps,
     )
 
     print(f"\n{'='*50}\n  {dataset} | Finetune | encoder={args.encoder}\n{'='*50}")
@@ -233,6 +245,56 @@ def _write_bench_summary(run_dir, dataset, mode, metrics, args):
           f"Log:          {run_dir}/run.log"]),
     ]
     write_summary_txt(run_dir, sections)
+
+
+def _build_moe_downstream(chans, hidden_dim, num_layers, num_classes, dropout,
+                          moe_num_experts=4, moe_top_k=2):
+    """Build a downstream LSTM -> MoE -> classifier model."""
+    feat_dim = hidden_dim * 2
+
+    class MoEDownstream(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.lstm = nn.LSTM(
+                input_size=chans,
+                hidden_size=hidden_dim,
+                num_layers=num_layers,
+                batch_first=True,
+                dropout=dropout if num_layers > 1 else 0.0,
+                bidirectional=True,
+            )
+            self.moe = MoELayer(
+                dim=feat_dim,
+                num_experts=moe_num_experts,
+                top_k=moe_top_k,
+                dropout=dropout,
+            )
+            self.classifier = nn.Sequential(
+                nn.Linear(feat_dim, 64),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+                nn.Linear(64, num_classes),
+            )
+
+        def forward(self, x):
+            x = x.transpose(1, 2)
+            _, (h_n, _) = self.lstm(x)
+            feat = torch.cat([h_n[-2], h_n[-1]], dim=1)
+            feat, _ = self.moe(feat)
+            return self.classifier(feat)
+
+    return MoEDownstream()
+
+
+def _load_matching_state(module, state_dict):
+    """Load only compatible tensors from a checkpoint into a module."""
+    module_state = module.state_dict()
+    matched = {
+        key: value for key, value in state_dict.items()
+        if key in module_state and module_state[key].shape == value.shape
+    }
+    module_state.update(matched)
+    module.load_state_dict(module_state)
 
 
 def _mode_baseline(args):
@@ -350,8 +412,8 @@ def main():
                         choices=list(MODEL_DICT.keys()))
 
     parser.add_argument("--lr", type=float, default=5e-4)
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--fold", type=int, default=None)
     parser.add_argument("--patience", type=int, default=10,
                         help="Early stopping patience (0 = disabled)")
@@ -361,14 +423,18 @@ def main():
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--dropout", type=float, default=0.3)
 
-    parser.add_argument("--encoder", type=str, default=None,
+    parser.add_argument("--encoder", type=str, default="Pretrained/multi_phase2_20260428_000128/encoder.pt",
                         help="Path to pre-trained encoder.pt")
-    parser.add_argument("--adapter", type=str, default=None,
+    parser.add_argument("--adapter", type=str, default="Pretrained/multi_phase2_20260428_000128/adapter.pt",
                         help="Path to pre-trained adapter.pt (Phase 2)")
     parser.add_argument("--encoder_lr", type=float, default=5e-5)
     parser.add_argument("--classifier_lr", type=float, default=5e-4)
     parser.add_argument("--unified_dim", type=int, default=64)
-    parser.add_argument("--device", type=str, default="auto",
+    parser.add_argument("--grad_accum_steps", type=int, default=1,
+                        help="Accumulate gradients for this many micro-batches")
+    parser.add_argument("--amp", action="store_true",
+                        help="Enable mixed-precision training on CUDA")
+    parser.add_argument("--device", type=str, default="cuda:1",
                         help="Device: cpu, cuda, cuda:0, etc. (auto-fallback if CUDA missing)")
 
     args = parser.parse_args()

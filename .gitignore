@@ -33,6 +33,11 @@ data/SEED_SUB1_DE_S23v1/*.h5
 data/SEED_SUB1_DE_TRIAL/*.h5
 data/SEED_SUB1_DE_STRAT/*.h5
 data/SEED_BYSUBJ/*.h5
+data/SEED_SUB1_DE_RANDOM/*.h5
+data/SEED_SUB1_DE_S23v1/*.h5
+data/SEED_SUB1_DE_TRIAL/*.h5
+data/SEED_SUB1_DE_STRAT/*.h5
+data/SEED_BYSUBJ/*.h5
 data/SEED_BYSUBJ/all.h5
 data/SEED_BYSUBJ/fold_*/train_idx.npy
 data/SEED_BYSUBJ/fold_*/val_idx.npy

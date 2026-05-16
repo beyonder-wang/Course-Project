@@ -1,0 +1,30 @@
+Generated: 2026-05-16 03:50:20
+============================================================
+
+Configuration
+----------------------------------------
+  Dataset: SEED_BYSUBJ
+  Model: DGCNN
+  Fold: all_folds
+  Channels: 62
+  Classes: 3
+  Time points: 400
+  Device: cpu
+  AMP: False
+  Grad accum steps: 1
+  Learning rate: 0.001
+  Batch size: 64
+  Epochs: 60
+
+Cross-Validation Results
+----------------------------------------
+  Mean final val accuracy: 0.4541
+  Std final val accuracy: 0.0283
+  Mean best val accuracy: 0.4711
+  Std best val accuracy: 0.0211
+
+Output Files
+----------------------------------------
+  CV summary: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/cv_summary.json
+  Config: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/config.json
+  Log: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/run.log

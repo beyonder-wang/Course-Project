@@ -615,11 +615,11 @@ def main():
     parser = argparse.ArgumentParser(
         description="SimCLR unsupervised pre-training for EEG classification"
     )
-    parser.add_argument("--phase", type=int, choices=[1, 2], default=1,
+    parser.add_argument("--phase", type=int, choices=[1, 2], default=2,
                         help="Phase 1: single-dataset; Phase 2: multi-dataset")
     parser.add_argument("--action", type=str, choices=["pretrain", "finetune", "both"],
-                        default="both")
-    parser.add_argument("--dataset", type=str, default="MDD",
+                        default="finetune")
+    parser.add_argument("--dataset", type=str, default="",
                         help="Dataset name (Phase 1 or Phase 2 finetune target)")
     parser.add_argument("--datasets", type=str, default=None,
                         help="Comma-separated dataset list for Phase 2 pretrain (default: all 5)")
@@ -627,7 +627,7 @@ def main():
     # Pre-training hyperparams
     parser.add_argument("--lr", type=float, default=5e-4, help="Pre-training LR")
     parser.add_argument("--epochs_pretrain", type=int, default=50)
-    parser.add_argument("--batch_size", type=int, default=256,
+    parser.add_argument("--batch_size", type=int, default=128,
                         help="Batch size (larger for SimCLR)")
     parser.add_argument("--grad_accum_steps", type=int, default=1,
                         help="Accumulate gradients for this many micro-batches")
@@ -669,13 +669,13 @@ def main():
     parser.add_argument("--aug_shift", type=int, default=10)
 
     # Checkpoint paths for fine-tuning
-    parser.add_argument("--pretrained_encoder", type=str, default=None,
+    parser.add_argument("--pretrained_encoder", type=str, default="Pretrained/multi_phase2_moe_20260427_233324/encoder.pt",
                         help="Path to encoder.pt for fine-tuning")
-    parser.add_argument("--pretrained_adapter", type=str, default=None,
+    parser.add_argument("--pretrained_adapter", type=str, default="Pretrained/multi_phase2_moe_20260427_233324/adapter.pt",
                         help="Path to adapter.pt for Phase 2 fine-tuning")
 
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda:1",
+    parser.add_argument("--device", type=str, default="cuda:0",
                         help="Device: cpu, cuda, cuda:0, cuda:3, etc. (auto-fallback if CUDA missing)")
     parser.add_argument("--amp", action="store_true",
                         help="Enable mixed-precision training on CUDA")

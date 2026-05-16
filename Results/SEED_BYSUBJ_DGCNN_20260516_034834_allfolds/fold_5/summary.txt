@@ -1,0 +1,35 @@
+Generated: 2026-05-16 03:50:20
+============================================================
+
+Configuration
+----------------------------------------
+  Dataset: SEED_BYSUBJ
+  Model: DGCNN
+  Fold: 5
+  Channels: 62
+  Classes: 3
+  Time points: 400
+  Device: cpu
+  AMP: False
+  Grad accum steps: 1
+  Learning rate: 0.001
+  Weight decay: 0.0003
+  Batch size: 64
+  Epochs: 60
+  Patience: 30
+  Scheduler: plateau
+
+Results
+----------------------------------------
+  Best val accuracy: 0.4407 (epoch 26)
+  Final val accuracy: 0.4074
+  Final train loss: 0.9643
+  Final val loss: 1.0648
+
+Output Files
+----------------------------------------
+  Model: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/fold_5/model.pt
+  Predictions: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/fold_5/predictions.txt
+  Metrics: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/fold_5/metrics.json
+  Config: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/fold_5/config.json
+  Log: Results/SEED_BYSUBJ_DGCNN_20260516_034834_allfolds/fold_5/run.log
