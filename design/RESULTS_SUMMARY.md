@@ -7,7 +7,8 @@
 | Pre-sweep (CPU) | 68.06% | 71.76% | — |
 | Round 1 | **69.91%** (weight_decay, seed 37) | — | — |
 | Round 2 | **68.98%** (combined, seed 42) | 67.59% (3-model) | — |
-| **Round 3** | *(running)* | *(running)* | **75%** |
+| Round 3 | **69.44%** (combined-std, seed 37) | 5-fold: **67.78%** mean | — |
+| **Final** | **69.91%** (weight_decay s37) | **5-fold ensemble** *(pending)* | **75%** |
 
 ---
 
@@ -54,20 +55,34 @@
 
 ---
 
-## Round 3 — Standardization + 5-fold CV (RUNNING)
+## Round 3 — Standardization + 5-fold CV (fold 1, 300 ep unless noted)
 
-| Config | Changes | Seeds | Status |
-|--------|---------|:-----:|:------:|
-| 14-combined-large-lr5e4 | Large + wd + clip + warmup + lr=5e-4 | 21, 37 | Pending |
-| 15-combined-std | wd + clip + warmup + `--standardize_inputs` | 21, 37 | Pending |
-| 16-combined-std-noise | wd + clip + warmup + std + `--aug_noise_std 0.05` | 21, 37 | Pending |
-| 17-eegconformer-v3 | Conformer + std + lr=1e-3 + plateau | 29, 43 | Pending |
-| 18-5fold-combined | 5-fold CV with best recipe (seed 37) | 37 | Pending |
+| Config | Changes | Seed 21 | Seed 37 | Seed 42 | Seed 29 | Seed 43 |
+|--------|---------|:-------:|:-------:|:-------:|:-------:|:-------:|
+| 14-combined-large-lr5e4 | wd+clip+warmup+large+lr=5e-4 | 64.35% | 65.74% | — | — | — |
+| **15-combined-std** | wd+clip+warmup+`--standardize_inputs` | **68.06%** | **69.44%** | — | — | — |
+| 16-combined-std-noise | wd+clip+warmup+std+`--aug_noise_std 0.05` | 67.13% | 68.06% | — | — | — |
+| 17-eegconformer-v3 | Conformer+std+lr=1e-3 | — | — | — | 36.11% ❌ | 37.04% ❌ |
+| 18-5fold-combined | 5-fold CV with best recipe (s37) | — | **67.78%** (mean) | — | — | — |
 
-**Round 3 hypotheses:**
-- Data isn't standardized → standardization `(--standardize_inputs)` fixes both aug_noise and Conformer
-- 5-fold CV provides diverse models for effective ensemble
-- Large preset with lower LR (5e-4) matches base model performance
+**Round 3 key findings:**
+- Standardization helps ATCNet (config 15: 68-69%), on par with best non-standardized runs
+- `aug_noise_std` is benign with standardized data (config 16: 67-68%) — confirms hypothesis
+- Large preset still underperforms (64-65%) — base model is BCIC2A sweet spot
+- EEGConformer v3 (36-37%) worse than v2 — **Conformer path abandoned**
+- 5-fold CV gives 5 diverse models at 67.78% mean — ready for ensemble
+
+---
+
+## Final Push: 5-fold Ensemble
+
+Train 5 models on different fold splits → average test predictions for model diversity:
+
+```bash
+python run_bcic2a_ensemble_5fold.py Results/BCIC2A_ATCNet_20260517_044019_allfolds
+```
+
+This script loads each fold's `model.pt`, runs soft-voting on the test set, and saves the ensemble predictions. The 5 models were trained on different 80/20 splits, giving them diverse decision boundaries — the most promising path to 75%.
 
 ---
 
