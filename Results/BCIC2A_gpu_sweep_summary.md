@@ -1,20 +1,24 @@
 # BCIC2A GPU Sweep Results
 
-Updated: 2026-05-17 17:32:54
+Updated: 2026-05-17 18:23:27
 
-**Best single model:** `27.31%` (EEGConformer-base, seed 43)
+**Best single model:** `25.46%` (04-aug-ls, seed 21)
 
 | Config | Seed | Best Val Acc | Best Epoch | Run Dir |
 |:---|---:|---:|---:|:---|
-| ATCNet-Large | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_172748_fold1` |
-| ATCNet-Large | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_172819_fold1` |
-| ATCNet-Large | 97 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_172852_fold1` |
-| ATCNet-XL | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_172924_fold1` |
-| ATCNet-XL | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_173012_fold1` |
-| EEGConformer-base | 29 | 25.93% | 1 | `BCIC2A_EEGConformer_20260517_173101_fold1` |
-| EEGConformer-base | 43 | 27.31% | 1 | `BCIC2A_EEGConformer_20260517_173126_fold1` |
-| EEGConformer-large | 29 | 25.46% | 1 | `BCIC2A_EEGConformer_20260517_173150_fold1` |
-| EEGConformer-large | 43 | 25.46% | 1 | `BCIC2A_EEGConformer_20260517_173215_fold1` |
+| 01-baseline-original | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_181948_fold1` |
+| 01-baseline-original | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182010_fold1` |
+| 02-baseline-large | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182019_fold1` |
+| 03-weight-decay | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182054_fold1` |
+| 03-weight-decay | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182116_fold1` |
+| 04-aug-ls | 21 | 25.46% | 1 | `BCIC2A_ATCNet_20260517_182138_fold1` |
+| 04-aug-ls | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182159_fold1` |
+| 05-clip-warmup | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182219_fold1` |
+| 05-clip-warmup | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182229_fold1` |
+| 06-full-combo | 21 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182238_fold1` |
+| 06-full-combo | 37 | 25.00% | 1 | `BCIC2A_ATCNet_20260517_182251_fold1` |
+| 07-eegconformer | 29 | 22.22% | 1 | `BCIC2A_EEGConformer_20260517_182304_fold1` |
+| 07-eegconformer | 43 | 24.07% | 1 | `BCIC2A_EEGConformer_20260517_182316_fold1` |
 
-**Top-3 average (ensemble estimate):** `26.23%`
+**Top-3 average (ensemble estimate):** `25.15%`
 **Stop target (75%):** Not yet

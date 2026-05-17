@@ -32,48 +32,71 @@ SUMMARY_PATH = os.path.join(RESULTS_DIR, "BCIC2A_gpu_sweep_summary.md")
 # Configuration presets
 # ---------------------------------------------------------------------------
 
-# Base recipe (common to all configs)
-BASE_ARGS = [
+# Known-good baseline: exact recipe that gave 68.06% on CPU
+# Only minimal GPU-appropriate changes: device cuda, amp, more epochs
+BASELINE_ARGS = [
     ("--dataset", "BCIC2A"),
+    ("--model", "ATCNet"),
     ("--fold", "1"),
-    ("--epochs", "500"),
+    ("--epochs", "300"),
+    ("--batch_size", "32"),
+    ("--lr", "1e-3"),
+    ("--device", "cuda"),
+    ("--amp",),
+    ("--mixup_alpha", "0.2"),
+    ("--scheduler", "plateau"),
+    ("--plateau_patience", "15"),
+    ("--plateau_factor", "0.9"),
+    ("--plateau_min_lr", "1e-4"),
+    ("--patience", "35"),
+]
+
+# Incremental improvements — add one thing at a time
+IMPROVE_LARGER = BASELINE_ARGS + [
+    ("--atc_preset", "large"),
+    ("--lr", "1e-3"),
+]
+
+IMPROVE_WD = BASELINE_ARGS + [
+    ("--weight_decay", "1e-4"),
+]
+
+IMPROVE_AUG = BASELINE_ARGS + [
+    ("--aug_noise_std", "0.05"),
+    ("--label_smoothing", "0.05"),
+]
+
+IMPROVE_CLIP_WARMUP = BASELINE_ARGS + [
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
+]
+
+IMPROVE_FULL = BASELINE_ARGS + [
+    ("--atc_preset", "large"),
+    ("--weight_decay", "1e-4"),
+    ("--aug_noise_std", "0.05"),
+    ("--label_smoothing", "0.05"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
     ("--batch_size", "64"),
+]
+
+CONFORMER_ARGS = [
+    ("--dataset", "BCIC2A"),
+    ("--model", "EEGConformer"),
+    ("--fold", "1"),
+    ("--epochs", "300"),
+    ("--batch_size", "64"),
+    ("--lr", "5e-4"),
     ("--device", "cuda"),
     ("--amp",),
     ("--weight_decay", "1e-4"),
     ("--grad_clip_norm", "1.0"),
-    ("--mixup_alpha", "0.2"),
-    ("--label_smoothing", "0.1"),
-    ("--aug_noise_std", "0.1"),
-    ("--scheduler", "plateau"),
-    ("--plateau_patience", "30"),
-    ("--plateau_factor", "0.8"),
-    ("--plateau_min_lr", "1e-5"),
-    ("--patience", "80"),
-]
-
-# Per-config extra args
-ATCNET_LARGE = [
-    ("--model", "ATCNet"),
-    ("--atc_preset", "large"),
-    ("--lr", "1e-3"),
-    ("--warmup_epochs", "10"),
-]
-
-ATCNET_XL = [
-    ("--model", "ATCNet"),
-    ("--atc_preset", "xl"),
-    ("--lr", "1e-3"),
-    ("--warmup_epochs", "10"),
-]
-
-CONFORMER_BASE = [
-    ("--model", "EEGConformer"),
-    ("--lr", "5e-4"),
     ("--warmup_epochs", "15"),
-    ("--aug_noise_std", "0.05"),
+    ("--mixup_alpha", "0.2"),
+    ("--label_smoothing", "0.05"),
     ("--scheduler", "cosine"),
-    ("--plateau_patience", "100"),  # cosine ignores this
+    ("--patience", "80"),
     ("--conf_dim", "64"),
     ("--conf_blocks", "4"),
     ("--conf_heads", "4"),
@@ -84,29 +107,15 @@ CONFORMER_BASE = [
     ("--conf_dropout", "0.1"),
 ]
 
-CONFORMER_LARGE = [
-    ("--model", "EEGConformer"),
-    ("--lr", "5e-4"),
-    ("--warmup_epochs", "15"),
-    ("--aug_noise_std", "0.05"),
-    ("--scheduler", "cosine"),
-    ("--plateau_patience", "100"),
-    ("--conf_dim", "80"),
-    ("--conf_blocks", "6"),
-    ("--conf_heads", "5"),
-    ("--conf_kernel", "31"),
-    ("--conf_ff_expansion", "4"),
-    ("--conf_patch_kernel", "25"),
-    ("--conf_patch_stride", "10"),
-    ("--conf_dropout", "0.1"),
-]
-
 SWEEP_CONFIGS = [
-    # (name, extra_args, seeds)
-    ("ATCNet-Large", ATCNET_LARGE, [21, 37, 97]),
-    ("ATCNet-XL", ATCNET_XL, [21, 37]),
-    ("EEGConformer-base", CONFORMER_BASE, [29, 43]),
-    ("EEGConformer-large", CONFORMER_LARGE, [29, 43]),
+    # (name, args_list, seeds)
+    ("01-baseline-original", BASELINE_ARGS, [21, 37]),
+    ("02-baseline-large", IMPROVE_LARGER, [37]),
+    ("03-weight-decay", IMPROVE_WD, [21, 37]),
+    ("04-aug-ls", IMPROVE_AUG, [21, 37]),
+    ("05-clip-warmup", IMPROVE_CLIP_WARMUP, [21, 37]),
+    ("06-full-combo", IMPROVE_FULL, [21, 37]),
+    ("07-eegconformer", CONFORMER_ARGS, [29, 43]),
 ]
 
 STOP_TARGET = 0.75  # stop sweep early if any run exceeds this
@@ -181,9 +190,9 @@ def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
     rows = []
 
-    for config_name, extra_args, seeds in SWEEP_CONFIGS:
+    for config_name, config_args, seeds in SWEEP_CONFIGS:
         for seed in seeds:
-            cmd = _flatten_args(BASE_ARGS + extra_args, seed)
+            cmd = _flatten_args(config_args, seed)
             if args.smoke_test:
                 # Override epochs to 1 for smoke test
                 cmd[cmd.index("--epochs") + 1] = "1"

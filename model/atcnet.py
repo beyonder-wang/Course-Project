@@ -125,12 +125,13 @@ class _ConvBlock(nn.Module):
 class _AttentionBlock(nn.Module):
     """Multi-head self-attention with residual connection + LayerNorm.
 
-    Matches the TF reference: attention weight dropout + extra dropout
-    on the FC output before the residual (see external_refs/EEG-ATCNet/).
+    Optional attention weight dropout and extra FC-output dropout
+    (from the TF reference, disabled by default — enable via
+    attn_drop and residual_drop when complementary regularization is used).
     """
 
     def __init__(self, d_model=32, key_dim=8, n_head=2, dropout=0.5,
-                 attn_drop=0.5, residual_drop=0.3):
+                 attn_drop=0.0, residual_drop=0.0):
         super().__init__()
         self.n_head = n_head
         self.key_dim = key_dim
@@ -160,13 +161,13 @@ class _AttentionBlock(nn.Module):
         scale = math.sqrt(self.key_dim)
         attn = torch.einsum('hblk,hbtk->hblt', q, k) / scale
         attn = torch.softmax(attn, dim=-1)
-        # Attention weight dropout (matches TF reference)
+        # Attention weight dropout (optional, default off)
         attn = F.dropout(attn, p=self.attn_drop, training=self.training)
 
         out = torch.einsum('hblt,hbtv->hblv', attn, v)
         out = out.permute(1, 2, 0, 3).reshape(B, L, self.inner_dim)
         out = self.dropout_fc(self.fc(out))
-        out = self.dropout_residual(out)  # extra dropout before residual (TF ref)
+        out = self.dropout_residual(out)  # extra dropout before residual (optional, default off)
         return out + residual
 
 
@@ -261,7 +262,7 @@ class ATCNet(nn.Module):
     def __init__(self, chans=22, num_classes=4, time_point=800,
                  F1=16, D=2, kernel_length=64, pool_length=8,
                  dropout_conv=0.3, d_model=32, key_dim=8, n_head=2,
-                 dropout_attn=0.5, attn_drop=0.5, residual_drop=0.3,
+                 dropout_attn=0.5, attn_drop=0.0, residual_drop=0.0,
                  tcn_depth=2, kernel_tcn=4, dropout_tcn=0.3,
                  drop_path_prob=0.0, n_windows=5):
         super().__init__()
