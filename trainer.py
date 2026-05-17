@@ -14,7 +14,8 @@ class Trainer:
                  batch_transform=None, mixup_alpha=0.0, emotion_head=None,
                  emotion_dl_alpha=0.0, emotion_aux_weight=1.0,
                  domain_head=None, domain_adv_weight=0.0,
-                 domain_target_key=None,
+                 domain_target_key=None, grad_clip_norm=0.0,
+                 warmup_epochs=0,
                  domain_adv_warmup_epochs=0):
         self.device = torch.device(device)
         self.model = model.to(self.device)
@@ -28,6 +29,8 @@ class Trainer:
         self.patience = patience
         self.use_amp = bool(use_amp and self.device.type == "cuda")
         self.grad_accum_steps = max(1, int(grad_accum_steps))
+        self.grad_clip_norm = float(max(0.0, grad_clip_norm))
+        self.warmup_epochs = max(0, int(warmup_epochs))
         self.scheduler = scheduler
         self.batch_transform = batch_transform
         self.mixup_alpha = float(max(0.0, mixup_alpha))
@@ -200,6 +203,8 @@ class Trainer:
 
                 pending_steps += 1
                 if pending_steps >= self.grad_accum_steps:
+                    if self.grad_clip_norm > 0:
+                        nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
                     if self.use_amp:
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
@@ -213,6 +218,8 @@ class Trainer:
                 train_num += n
 
             if pending_steps > 0:
+                if self.grad_clip_norm > 0:
+                    nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip_norm)
                 if self.use_amp:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
@@ -258,6 +265,13 @@ class Trainer:
                     self.scheduler.step(epoch_val_loss)
                 else:
                     self.scheduler.step()
+
+            # Linear LR warmup: override scheduler during warmup phase
+            if self.warmup_epochs > 0 and epoch < self.warmup_epochs:
+                lr_scale = min(1.0, (epoch + 1) / self.warmup_epochs)
+                warmup_lr = self.lr * lr_scale
+                for pg in self.optimizer.param_groups:
+                    pg['lr'] = warmup_lr
 
             if epoch_val_acc > best_acc:
                 best_acc = epoch_val_acc

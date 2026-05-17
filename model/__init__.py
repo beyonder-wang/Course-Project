@@ -25,6 +25,7 @@ from .fbcnet import FBCNet
 from .tcnet import EEGTCNet
 from .shallownet import ShallowConvNet
 from .atcnet import ATCNet
+from .conformer import EEGConformer
 from .dgcnn import DGCNN, DGCNN_RG
 from .rgnn import RGNN
 from .emotion_dl import EmotionDLHead
@@ -68,6 +69,8 @@ MODEL_DICT = {
     "ShallowConvNet": ShallowConvNet,
     # ATCNet: Attention TCN for motor imagery
     "ATCNet": ATCNet,
+    # EEGConformer: CNN + Transformer hybrid
+    "EEGConformer": EEGConformer,
 }
 
 __all__ = [

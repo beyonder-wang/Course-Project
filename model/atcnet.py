@@ -123,19 +123,26 @@ class _ConvBlock(nn.Module):
 
 
 class _AttentionBlock(nn.Module):
-    """Multi-head self-attention with residual connection + LayerNorm."""
+    """Multi-head self-attention with residual connection + LayerNorm.
 
-    def __init__(self, d_model=32, key_dim=8, n_head=2, dropout=0.5):
+    Matches the TF reference: attention weight dropout + extra dropout
+    on the FC output before the residual (see external_refs/EEG-ATCNet/).
+    """
+
+    def __init__(self, d_model=32, key_dim=8, n_head=2, dropout=0.5,
+                 attn_drop=0.5, residual_drop=0.3):
         super().__init__()
         self.n_head = n_head
         self.key_dim = key_dim
         self.inner_dim = n_head * key_dim
+        self.attn_drop = attn_drop
 
         self.w_q = nn.Linear(d_model, self.inner_dim)
         self.w_k = nn.Linear(d_model, self.inner_dim)
         self.w_v = nn.Linear(d_model, self.inner_dim)
         self.fc = nn.Linear(self.inner_dim, d_model)
-        self.dropout = nn.Dropout(dropout)
+        self.dropout_fc = nn.Dropout(dropout)
+        self.dropout_residual = nn.Dropout(residual_drop)
         self.norm = nn.LayerNorm(d_model)
 
         _glorot_init(self)
@@ -153,18 +160,34 @@ class _AttentionBlock(nn.Module):
         scale = math.sqrt(self.key_dim)
         attn = torch.einsum('hblk,hbtk->hblt', q, k) / scale
         attn = torch.softmax(attn, dim=-1)
+        # Attention weight dropout (matches TF reference)
+        attn = F.dropout(attn, p=self.attn_drop, training=self.training)
 
         out = torch.einsum('hblt,hbtv->hblv', attn, v)
         out = out.permute(1, 2, 0, 3).reshape(B, L, self.inner_dim)
-        out = self.dropout(self.fc(out))
+        out = self.dropout_fc(self.fc(out))
+        out = self.dropout_residual(out)  # extra dropout before residual (TF ref)
         return out + residual
+
+
+def _drop_path(x, drop_prob=0.0, training=False):
+    """Stochastic Depth / DropPath per sample (standard from Deep Residual Learning)."""
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = 1.0 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()
+    return x.div(keep_prob) * random_tensor
 
 
 class _TCNBlock(nn.Module):
     """Single TCN block: 2 causal dilated convs + residual."""
 
-    def __init__(self, n_filters=32, kernel_size=4, dilation=1, dropout=0.3):
+    def __init__(self, n_filters=32, kernel_size=4, dilation=1,
+                 dropout=0.3, drop_path_prob=0.0):
         super().__init__()
+        self.drop_path_prob = drop_path_prob
 
         self.conv1 = nn.Sequential(
             _CausalConv1d(n_filters, n_filters, kernel_size, dilation=dilation),
@@ -187,16 +210,19 @@ class _TCNBlock(nn.Module):
         residual = x
         x = self.conv1(x)
         x = self.conv2(x)
-        return self.act(x + residual)
+        x = self.act(x + residual)
+        return _drop_path(x, self.drop_path_prob, self.training)
 
 
 class _TCN(nn.Module):
     """Stack of TCN blocks with exponentially increasing dilation."""
 
-    def __init__(self, depth=2, kernel_size=4, n_filters=32, dropout=0.3):
+    def __init__(self, depth=2, kernel_size=4, n_filters=32,
+                 dropout=0.3, drop_path_prob=0.0):
         super().__init__()
         self.blocks = nn.ModuleList([
-            _TCNBlock(n_filters, kernel_size, dilation=2 ** i, dropout=dropout)
+            _TCNBlock(n_filters, kernel_size, dilation=2 ** i,
+                      dropout=dropout, drop_path_prob=drop_path_prob)
             for i in range(depth)
         ])
 
@@ -235,8 +261,9 @@ class ATCNet(nn.Module):
     def __init__(self, chans=22, num_classes=4, time_point=800,
                  F1=16, D=2, kernel_length=64, pool_length=8,
                  dropout_conv=0.3, d_model=32, key_dim=8, n_head=2,
-                 dropout_attn=0.5, tcn_depth=2, kernel_tcn=4,
-                 dropout_tcn=0.3, n_windows=5):
+                 dropout_attn=0.5, attn_drop=0.5, residual_drop=0.3,
+                 tcn_depth=2, kernel_tcn=4, dropout_tcn=0.3,
+                 drop_path_prob=0.0, n_windows=5):
         super().__init__()
 
         self.n_windows = n_windows
@@ -250,8 +277,10 @@ class ATCNet(nn.Module):
         # --- ATC blocks (one per sliding window) ---
         # Each ATC block: Attention → TCN → Linear classifier
         for w in range(n_windows):
-            attn = _AttentionBlock(d_model, key_dim, n_head, dropout_attn)
-            tcn = _TCN(tcn_depth, kernel_tcn, d_model, dropout_tcn)
+            attn = _AttentionBlock(d_model, key_dim, n_head, dropout_attn,
+                                   attn_drop=attn_drop, residual_drop=residual_drop)
+            tcn = _TCN(tcn_depth, kernel_tcn, d_model, dropout_tcn,
+                       drop_path_prob=drop_path_prob)
             linear = _LinearWithConstraint(d_model, num_classes, max_norm=0.25)
             self.add_module(f'attn_{w}', attn)
             self.add_module(f'tcn_{w}', tcn)
@@ -281,3 +310,23 @@ class ATCNet(nn.Module):
             outputs = outputs + linear(tcn_out[:, :, -1])
 
         return outputs / self.n_windows
+
+
+# ---------------------------------------------------------------------------
+# Capacity presets
+# ---------------------------------------------------------------------------
+
+ATCNET_PRESETS = {
+    "base": dict(
+        F1=16, D=2, d_model=32, n_head=2, n_windows=5, tcn_depth=2,
+        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+    ),
+    "large": dict(
+        F1=24, D=2, d_model=48, n_head=4, n_windows=7, tcn_depth=3,
+        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+    ),
+    "xl": dict(
+        F1=32, D=2, d_model=64, n_head=4, n_windows=9, tcn_depth=4,
+        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+    ),
+}

@@ -114,7 +114,7 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     model_cls = MODEL_DICT[args.model]
     time_point_models = {"EEGNet", "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
                          "EEGNet_KAN", "ShallowConvNet", "ATCNet", "FBCNet",
-                         "EEGTCNet", "MICNN"}
+                         "EEGTCNet", "MICNN", "EEGConformer"}
     if args.model in ("SimpleLinear", "SimpleMLP", "DENet"):
         model = model_cls(
             input_channels=channels, time_points=time_points, num_classes=num_classes
@@ -122,13 +122,26 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     elif args.model in time_point_models:
         model_kwargs = dict(chans=channels, num_classes=num_classes, time_point=time_points)
         if args.model == "ATCNet":
-            model_kwargs["n_windows"] = args.atc_n_windows
-            model_kwargs["F1"] = args.atc_f1
-            model_kwargs["d_model"] = args.atc_d_model
-            model_kwargs["dropout_conv"] = args.atc_dropout_conv
-            model_kwargs["dropout_attn"] = args.atc_dropout_attn
-            model_kwargs["dropout_tcn"] = args.atc_dropout_tcn
-            model_kwargs["tcn_depth"] = args.atc_tcn_depth
+            from model.atcnet import ATCNET_PRESETS
+            if args.atc_preset is not None:
+                model_kwargs.update(ATCNET_PRESETS[args.atc_preset])
+            else:
+                model_kwargs["n_windows"] = args.atc_n_windows
+                model_kwargs["F1"] = args.atc_f1
+                model_kwargs["d_model"] = args.atc_d_model
+                model_kwargs["dropout_conv"] = args.atc_dropout_conv
+                model_kwargs["dropout_attn"] = args.atc_dropout_attn
+                model_kwargs["dropout_tcn"] = args.atc_dropout_tcn
+                model_kwargs["tcn_depth"] = args.atc_tcn_depth
+        elif args.model == "EEGConformer":
+            model_kwargs["dim"] = args.conf_dim
+            model_kwargs["n_blocks"] = args.conf_blocks
+            model_kwargs["n_head"] = args.conf_heads
+            model_kwargs["kernel_size"] = args.conf_kernel
+            model_kwargs["ff_expansion"] = args.conf_ff_expansion
+            model_kwargs["patch_kernel"] = args.conf_patch_kernel
+            model_kwargs["patch_stride"] = args.conf_patch_stride
+            model_kwargs["dropout"] = args.conf_dropout
         model = model_cls(**model_kwargs)
     elif args.model == "SEEDGraphormer":
         model = model_cls(
@@ -272,6 +285,8 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         domain_head=domain_head,
         domain_adv_weight=args.subject_adv_weight,
         domain_target_key=args.subject_adv_key,
+        grad_clip_norm=args.grad_clip_norm,
+        warmup_epochs=args.warmup_epochs,
     )
 
     history = trainer.train()
@@ -429,6 +444,9 @@ def main():
                         help="Top-k sparse neighbors retained by SEEDBandGraphNet")
     parser.add_argument("--bandgraph_dyn_alpha", type=float, default=0.2,
                         help="Weight of dynamic DE-similarity adjacency in SEEDBandGraphNet")
+    parser.add_argument("--atc_preset", type=str, default=None,
+                        choices=["base", "large", "xl"],
+                        help="ATCNet capacity preset (overrides individual --atc_* args)")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
     parser.add_argument("--sr_aug_times", type=int, default=0,
@@ -447,6 +465,26 @@ def main():
                         help="ATCNet TCN dropout")
     parser.add_argument("--atc_tcn_depth", type=int, default=2,
                         help="ATCNet TCN depth")
+    parser.add_argument("--grad_clip_norm", type=float, default=0.0,
+                        help="Gradient clipping max norm (0 = disabled)")
+    parser.add_argument("--warmup_epochs", type=int, default=0,
+                        help="Number of linear LR warmup epochs (0 = no warmup)")
+    parser.add_argument("--conf_dim", type=int, default=64,
+                        help="EEGConformer model dimension")
+    parser.add_argument("--conf_blocks", type=int, default=4,
+                        help="EEGConformer number of Conformer blocks")
+    parser.add_argument("--conf_heads", type=int, default=4,
+                        help="EEGConformer attention heads per block")
+    parser.add_argument("--conf_kernel", type=int, default=31,
+                        help="EEGConformer depthwise conv kernel size")
+    parser.add_argument("--conf_ff_expansion", type=int, default=4,
+                        help="EEGConformer FFN expansion factor")
+    parser.add_argument("--conf_patch_kernel", type=int, default=25,
+                        help="EEGConformer patch embedding kernel size")
+    parser.add_argument("--conf_patch_stride", type=int, default=10,
+                        help="EEGConformer patch embedding stride")
+    parser.add_argument("--conf_dropout", type=float, default=0.1,
+                        help="EEGConformer dropout rate")
 
     args = parser.parse_args()
     args.device = resolve_device(args.device)

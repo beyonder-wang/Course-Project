@@ -29,6 +29,15 @@ def build_model(cfg):
         kwargs["dropout_attn"] = cfg.get("atc_dropout_attn", 0.5)
         kwargs["dropout_tcn"] = cfg.get("atc_dropout_tcn", 0.3)
         kwargs["tcn_depth"] = cfg.get("atc_tcn_depth", 2)
+    elif cfg["model"] == "EEGConformer":
+        kwargs["dim"] = cfg.get("conf_dim", 64)
+        kwargs["n_blocks"] = cfg.get("conf_blocks", 4)
+        kwargs["n_head"] = cfg.get("conf_heads", 4)
+        kwargs["kernel_size"] = cfg.get("conf_kernel", 31)
+        kwargs["ff_expansion"] = cfg.get("conf_ff_expansion", 4)
+        kwargs["patch_kernel"] = cfg.get("conf_patch_kernel", 25)
+        kwargs["patch_stride"] = cfg.get("conf_patch_stride", 10)
+        kwargs["dropout"] = cfg.get("conf_dropout", 0.1)
     return model_cls(**kwargs)
 
 
