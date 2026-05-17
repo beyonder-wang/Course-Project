@@ -180,23 +180,85 @@ BASELINE_MORE_EPOCHS = [
     ("--seed", "42"),
 ]
 
-SWEEP_CONFIGS = [
-    # Round 1 (for reference — skip if already done)
-    # ("01-baseline-original", BASELINE_ARGS, [21, 37]),
-    # ("02-baseline-large", IMPROVE_LARGER, [37]),
-    # ("03-weight-decay", IMPROVE_WD, [21, 37]),
-    # ("04-aug-ls", IMPROVE_AUG, [21, 37]),
-    # ("05-clip-warmup", IMPROVE_CLIP_WARMUP, [21, 37]),
-    # ("06-full-combo", IMPROVE_FULL, [21, 37]),
-    # ("07-eegconformer", CONFORMER_ARGS, [29, 43]),
+# ----- Round 3 configs (from Round 2 learnings) -----
 
-    # Round 2 — build on what worked
-    ("08-combined-wd-clip-warmup", COMBINED, [21, 37, 42]),
-    ("09-combined-large", COMBINED_LARGE, [21, 37, 42]),
-    ("10-noise-only", AUG_ONLY, [21, 37]),
-    ("11-ls-only", LS_ONLY, [21, 37]),
-    ("12-eegconformer-v2", CONFORMER_ARGS_V2, [29, 43]),
-    ("13-baseline-seed42", BASELINE_MORE_EPOCHS, [42]),
+# Large preset might need lower LR
+COMBINED_LARGE_LR5E4 = BASELINE_ARGS + [
+    ("--atc_preset", "large"),
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
+    ("--lr", "5e-4"),
+]
+
+# Test if standardization helps the combined recipe
+# Hypothesis: non-standardized data causes aug_noise and Conformer to fail
+COMBINED_STD = BASELINE_ARGS + [
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
+    ("--standardize_inputs",),
+]
+
+# Test if noise works with standardized data
+COMBINED_STD_NOISE = COMBINED_STD + [
+    ("--aug_noise_std", "0.05"),
+]
+
+# EEGConformer v3: add standardize, try 1e-3 LR
+CONFORMER_ARGS_V3 = [
+    ("--dataset", "BCIC2A"),
+    ("--model", "EEGConformer"),
+    ("--fold", "1"),
+    ("--epochs", "500"),
+    ("--batch_size", "64"),
+    ("--lr", "1e-3"),
+    ("--device", "cuda"),
+    ("--amp",),
+    ("--standardize_inputs",),
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "15"),
+    ("--mixup_alpha", "0.2"),
+    ("--scheduler", "plateau"),
+    ("--plateau_patience", "30"),
+    ("--plateau_factor", "0.8"),
+    ("--plateau_min_lr", "1e-5"),
+    ("--patience", "100"),
+    ("--conf_dim", "64"),
+    ("--conf_blocks", "4"),
+    ("--conf_heads", "4"),
+    ("--conf_kernel", "31"),
+    ("--conf_ff_expansion", "4"),
+    ("--conf_patch_kernel", "25"),
+    ("--conf_patch_stride", "10"),
+    ("--conf_dropout", "0.1"),
+]
+
+# 5-fold CV with best recipe — trains on fold 1-5 sequentially
+COMBINED_5FOLD = BASELINE_ARGS + [
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
+    ("--fold", "-1"),
+    ("--seed", "37"),
+]
+
+SWEEP_CONFIGS = [
+    # Round 1-2 (for reference — skip if already done)
+    # ("08-combined-wd-clip-warmup", COMBINED, [21, 37, 42]),
+    # ("09-combined-large", COMBINED_LARGE, [21, 37, 42]),
+    # ("10-noise-only", AUG_ONLY, [21, 37]),
+    # ("11-ls-only", LS_ONLY, [21, 37]),
+    # ("12-eegconformer-v2", CONFORMER_ARGS_V2, [29, 43]),
+    # ("13-baseline-seed42", BASELINE_MORE_EPOCHS, [42]),
+
+    # Round 3 — standardization + Conformer fix + 5-fold
+    ("14-combined-large-lr5e4", COMBINED_LARGE_LR5E4, [21, 37]),
+    ("15-combined-std", COMBINED_STD, [21, 37]),
+    ("16-combined-std-noise", COMBINED_STD_NOISE, [21, 37]),
+    ("17-eegconformer-v3", CONFORMER_ARGS_V3, [29, 43]),
+    ("18-5fold-combined", COMBINED_5FOLD, [37]),
 ]
 
 STOP_TARGET = 0.75  # stop sweep early if any run exceeds this
@@ -213,7 +275,7 @@ def _flatten_args(pairs, seed):
 def _latest_result_dir(before):
     after = {
         name for name in os.listdir(RESULTS_DIR)
-        if name.startswith("BCIC2A_")
+        if name.startswith("BCIC2A_") and "_ensemble_" not in name
     }
     new_dirs = sorted(after - before)
     if not new_dirs:
@@ -239,7 +301,8 @@ def _write_summary(rows):
     for row in rows:
         lines.append(
             f"| {row['config']} | {row['seed']} | "
-            f"{row['best_val_accuracy'] * 100:.2f}% | {row['best_epoch']} | "
+            f"{row['best_val_accuracy'] * 100:.2f}% | "
+            f"{row['best_epoch'] if row['best_epoch'] is not None else '-'} | "
             f"`{os.path.basename(row['run_dir'])}` |"
         )
 
@@ -301,11 +364,26 @@ def main():
                 time.sleep(1)
                 continue
 
-            with open(os.path.join(run_dir, "metrics.json"), "r") as f:
-                metrics = json.load(f)
+            # Support both single-fold (metrics.json) and 5-fold (cv_summary.json)
+            metrics_path = os.path.join(run_dir, "metrics.json")
+            cv_path = os.path.join(run_dir, "cv_summary.json")
+            if os.path.exists(metrics_path):
+                with open(metrics_path, "r") as f:
+                    metrics = json.load(f)
+                val_acc = metrics["best_val_accuracy"]
+                best_epoch = metrics["best_epoch"]
+            elif os.path.exists(cv_path):
+                with open(cv_path, "r") as f:
+                    cv = json.load(f)
+                val_acc = cv["mean_best_val_accuracy"]
+                best_epoch = None
+                print(f"  5-fold per-fold: {cv['per_fold']}")
+            else:
+                print(f"[WARN] {desc}: no metrics.json or cv_summary.json found")
+                time.sleep(1)
+                continue
 
-            val_acc = metrics["best_val_accuracy"]
-            print(f"  {desc}: {val_acc * 100:.2f}% (epoch {metrics['best_epoch']}) "
+            print(f"  {desc}: {val_acc * 100:.2f}% (epoch {best_epoch}) "
                   f"[{elapsed / 60:.1f} min]")
 
             rows.append({
@@ -313,7 +391,7 @@ def main():
                 "seed": seed,
                 "run_dir": run_dir,
                 "best_val_accuracy": val_acc,
-                "best_epoch": metrics["best_epoch"],
+                "best_epoch": best_epoch,
             })
             _write_summary(rows)
 
