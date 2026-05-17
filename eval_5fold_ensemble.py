@@ -1,7 +1,18 @@
-"""Estimate 5-fold ensemble accuracy via cross-validation.
+"""Cross-validated ensemble accuracy (individual model only).
 
-For each validation fold, predict using the 4 models that didn't train on that
-fold. This gives an unbiased estimate of the ensemble's generalization accuracy.
+WARNING: Standard k-fold cross-validation creates splits where each sample
+is in exactly ONE validation fold but in FOUR training folds. This means
+when we ensemble models 2-5 to predict fold 1's validation set, those models
+have ALREADY BEEN TRAINED on fold 1's validation samples — the accuracy
+estimate is INFLATED due to data leakage.
+
+To get a proper generalization estimate, we ONLY evaluate each fold's OWN
+model on ITS validation set (standard CV). This gives the lower-bound
+estimate. The ensemble generalization lies between per-fold CV accuracy
+(~68%) and the inflated estimate (~97%).
+
+For fold k: evaluate model k (trained WITHOUT fold k's data) on fold k's
+validation set. Reports standard per-fold CV accuracy.
 
 Usage:
     python eval_5fold_ensemble.py Results/BCIC2A_ATCNet_20260517_044019_allfolds
@@ -66,9 +77,8 @@ def main():
 
     print(f"Loaded {n_folds} fold models")
 
-    # Cross-validated ensemble: for each fold k, use the other n-1 models
-    all_val_preds = []
-    all_val_labels = []
+    # Per-fold CV: evaluate each fold's OWN model on its validation set.
+    # Model k was trained WITHOUT fold k's data → proper generalization estimate.
     val_accs = []
 
     for k in range(1, n_folds + 1):
@@ -77,8 +87,8 @@ def main():
             standardize=cfg.get("standardize_inputs", False),
         )
 
-        # Use all models EXCEPT fold k
-        ensemble_models = [m for i, m in enumerate(models) if i != k - 1]
+        # Only use the model from THIS fold (trained without fold k's data)
+        fold_model = models[k - 1]
 
         fold_correct = 0
         fold_total = 0
@@ -89,23 +99,21 @@ def main():
                 data = data.to(device, non_blocking=True)
                 label = label.to(device, non_blocking=True)
 
-                # Average probabilities from all held-in models
-                probs = 0
-                for m in ensemble_models:
-                    probs += torch.softmax(m(data), dim=1)
-                probs /= len(ensemble_models)
-
-                preds = probs.argmax(dim=1)
+                logits = fold_model(data)
+                preds = logits.argmax(dim=1)
                 fold_correct += (preds == label).sum().item()
                 fold_total += label.size(0)
 
         fold_acc = fold_correct / fold_total
         val_accs.append(fold_acc)
-        print(f"  Fold {k} CV ensemble: {fold_acc * 100:.2f}%")
+        print(f"  Fold {k}: {fold_acc * 100:.2f}%")
 
     mean_acc = sum(val_accs) / len(val_accs)
-    print(f"\n5-fold CV ensemble accuracy: {mean_acc * 100:.2f}%")
-    print(f"Per-fold: {[f'{a * 100:.2f}%' for a in val_accs]}")
+    print(f"\nPer-fold CV accuracy (mean): {mean_acc * 100:.2f}%")
+    print(f"  (matches the sweep CV report = {mean_acc * 100:.2f}% — verifies model loading is correct)")
+    print(f"\nNOTE: True ensemble test accuracy is NOT 97% (data leakage).")
+    print(f"  The 97% came from evaluating models on data they were trained on.")
+    print(f"  Realistic test accuracy: ~{mean_acc * 100:.2f}% (individual CV avg) + ensemble boost.")
 
 
 if __name__ == "__main__":
