@@ -38,8 +38,11 @@ def build_model(cfg):
         kwargs["d_model"] = cfg.get("atc_d_model", 32)
         kwargs["n_windows"] = cfg.get("atc_n_windows", 5)
         kwargs["dropout_conv"] = cfg.get("atc_dropout_conv", 0.3)
-        kwargs["dropout_attn"] = cfg.get("atc_dropout_attn", 0.5)
+        kwargs["dropout_attn"] = cfg.get("atc_dropout_attn", 0.3)
+        kwargs["attn_drop"] = cfg.get("atc_attn_drop", 0.5)
         kwargs["dropout_tcn"] = cfg.get("atc_dropout_tcn", 0.3)
+        kwargs["residual_drop"] = cfg.get("atc_residual_drop", 0.0)
+        kwargs["drop_path_prob"] = cfg.get("atc_drop_path_prob", 0.0)
         kwargs["tcn_depth"] = cfg.get("atc_tcn_depth", 2)
     return model_cls(**kwargs)
 

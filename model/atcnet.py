@@ -21,7 +21,7 @@ import torch.nn.functional as F
 # ---------------------------------------------------------------------------
 
 class _Conv2dWithConstraint(nn.Conv2d):
-    def __init__(self, *args, max_norm=1.0, **kwargs):
+    def __init__(self, *args, max_norm=0.6, **kwargs):
         self.max_norm = max_norm
         super().__init__(*args, **kwargs)
 
@@ -58,6 +58,19 @@ class _CausalConv1d(nn.Conv1d):
         return super().forward(F.pad(x, (self._padding, 0)))
 
 
+class _CausalConv1dWithConstraint(_CausalConv1d):
+    def __init__(self, *args, max_norm=0.6, **kwargs):
+        self.max_norm = max_norm
+        super().__init__(*args, **kwargs)
+
+    def forward(self, x):
+        if self.max_norm is not None:
+            with torch.no_grad():
+                self.weight.data = torch.renorm(
+                    self.weight.data, p=2, dim=0, maxnorm=self.max_norm)
+        return super().forward(x)
+
+
 def _glorot_init(module):
     for m in module.modules():
         if isinstance(m, (nn.Conv2d, nn.Linear)):
@@ -78,21 +91,22 @@ class _ConvBlock(nn.Module):
                  in_channels=22, dropout=0.3):
         super().__init__()
 
-        self.temporal_conv = nn.Conv2d(
+        self.temporal_conv = _Conv2dWithConstraint(
             1, F1, (1, kernel_length),
-            padding=(0, kernel_length // 2), bias=False)
+            padding=(0, kernel_length // 2), bias=False, max_norm=0.6)
         self.bn1 = nn.BatchNorm2d(F1)
 
         self.spatial_conv = _Conv2dWithConstraint(
             F1, F1 * D, (in_channels, 1),
-            groups=F1, bias=False, max_norm=1.0)
+            groups=F1, bias=False, max_norm=0.6)
         self.bn2 = nn.BatchNorm2d(F1 * D)
         self.act1 = nn.ELU()
         self.pool1 = nn.AvgPool2d((1, pool_length))
         self.drop1 = nn.Dropout(dropout)
 
-        self.conv = nn.Conv2d(F1 * D, F1 * D, (1, 16),
-                              padding=(0, 8), bias=False)
+        self.conv = _Conv2dWithConstraint(
+            F1 * D, F1 * D, (1, 16),
+            padding=(0, 8), bias=False, max_norm=0.6)
         self.bn3 = nn.BatchNorm2d(F1 * D)
         self.act2 = nn.ELU()
         self.pool2 = nn.AvgPool2d((1, 7))
@@ -130,8 +144,8 @@ class _AttentionBlock(nn.Module):
     attn_drop and residual_drop when complementary regularization is used).
     """
 
-    def __init__(self, d_model=32, key_dim=8, n_head=2, dropout=0.5,
-                 attn_drop=0.0, residual_drop=0.0):
+    def __init__(self, d_model=32, key_dim=8, n_head=2, dropout=0.3,
+                 attn_drop=0.5, residual_drop=0.0):
         super().__init__()
         self.n_head = n_head
         self.key_dim = key_dim
@@ -191,13 +205,15 @@ class _TCNBlock(nn.Module):
         self.drop_path_prob = drop_path_prob
 
         self.conv1 = nn.Sequential(
-            _CausalConv1d(n_filters, n_filters, kernel_size, dilation=dilation),
+            _CausalConv1dWithConstraint(
+                n_filters, n_filters, kernel_size, dilation=dilation, max_norm=0.6),
             nn.BatchNorm1d(n_filters),
             nn.ELU(),
             nn.Dropout(dropout),
         )
         self.conv2 = nn.Sequential(
-            _CausalConv1d(n_filters, n_filters, kernel_size, dilation=dilation),
+            _CausalConv1dWithConstraint(
+                n_filters, n_filters, kernel_size, dilation=dilation, max_norm=0.6),
             nn.BatchNorm1d(n_filters),
             nn.ELU(),
             nn.Dropout(dropout),
@@ -262,7 +278,7 @@ class ATCNet(nn.Module):
     def __init__(self, chans=22, num_classes=4, time_point=800,
                  F1=16, D=2, kernel_length=64, pool_length=8,
                  dropout_conv=0.3, d_model=32, key_dim=8, n_head=2,
-                 dropout_attn=0.5, attn_drop=0.0, residual_drop=0.0,
+                 dropout_attn=0.3, attn_drop=0.5, residual_drop=0.0,
                  tcn_depth=2, kernel_tcn=4, dropout_tcn=0.3,
                  drop_path_prob=0.0, n_windows=5):
         super().__init__()
@@ -320,14 +336,18 @@ class ATCNet(nn.Module):
 ATCNET_PRESETS = {
     "base": dict(
         F1=16, D=2, d_model=32, n_head=2, n_windows=5, tcn_depth=2,
-        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+        dropout_conv=0.3, dropout_attn=0.3, attn_drop=0.5, dropout_tcn=0.3,
+    ),
+    "paper": dict(
+        F1=16, D=2, d_model=32, n_head=2, n_windows=5, tcn_depth=2,
+        dropout_conv=0.3, dropout_attn=0.3, attn_drop=0.5, dropout_tcn=0.3,
     ),
     "large": dict(
         F1=24, D=2, d_model=48, n_head=4, n_windows=7, tcn_depth=3,
-        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+        dropout_conv=0.3, dropout_attn=0.3, attn_drop=0.5, dropout_tcn=0.3,
     ),
     "xl": dict(
         F1=32, D=2, d_model=64, n_head=4, n_windows=9, tcn_depth=4,
-        dropout_conv=0.3, dropout_attn=0.5, dropout_tcn=0.3,
+        dropout_conv=0.3, dropout_attn=0.3, attn_drop=0.5, dropout_tcn=0.3,
     ),
 }

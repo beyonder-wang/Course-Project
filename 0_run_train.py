@@ -131,7 +131,10 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
                 model_kwargs["d_model"] = args.atc_d_model
                 model_kwargs["dropout_conv"] = args.atc_dropout_conv
                 model_kwargs["dropout_attn"] = args.atc_dropout_attn
+                model_kwargs["attn_drop"] = args.atc_attn_drop
                 model_kwargs["dropout_tcn"] = args.atc_dropout_tcn
+                model_kwargs["residual_drop"] = args.atc_residual_drop
+                model_kwargs["drop_path_prob"] = args.atc_drop_path_prob
                 model_kwargs["tcn_depth"] = args.atc_tcn_depth
         elif args.model == "EEGConformer":
             model_kwargs["dim"] = args.conf_dim
@@ -445,7 +448,7 @@ def main():
     parser.add_argument("--bandgraph_dyn_alpha", type=float, default=0.2,
                         help="Weight of dynamic DE-similarity adjacency in SEEDBandGraphNet")
     parser.add_argument("--atc_preset", type=str, default=None,
-                        choices=["base", "large", "xl"],
+                        choices=["base", "paper", "large", "xl"],
                         help="ATCNet capacity preset (overrides individual --atc_* args)")
     parser.add_argument("--atc_n_windows", type=int, default=5,
                         help="Sliding-window count for ATCNet")
@@ -459,10 +462,16 @@ def main():
                         help="ATCNet attention/TCN hidden size")
     parser.add_argument("--atc_dropout_conv", type=float, default=0.3,
                         help="ATCNet conv-block dropout")
-    parser.add_argument("--atc_dropout_attn", type=float, default=0.5,
-                        help="ATCNet attention dropout")
+    parser.add_argument("--atc_dropout_attn", type=float, default=0.3,
+                        help="ATCNet post-attention projection dropout")
+    parser.add_argument("--atc_attn_drop", type=float, default=0.5,
+                        help="ATCNet attention-weight dropout")
     parser.add_argument("--atc_dropout_tcn", type=float, default=0.3,
                         help="ATCNet TCN dropout")
+    parser.add_argument("--atc_residual_drop", type=float, default=0.0,
+                        help="ATCNet extra residual-branch dropout after attention")
+    parser.add_argument("--atc_drop_path_prob", type=float, default=0.0,
+                        help="ATCNet stochastic depth probability inside TCN blocks")
     parser.add_argument("--atc_tcn_depth", type=int, default=2,
                         help="ATCNet TCN depth")
     parser.add_argument("--grad_clip_norm", type=float, default=0.0,
