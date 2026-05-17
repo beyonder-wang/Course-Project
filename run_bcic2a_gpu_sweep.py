@@ -107,15 +107,96 @@ CONFORMER_ARGS = [
     ("--conf_dropout", "0.1"),
 ]
 
+# ----- Round 2 configs (from Round 1 learnings) -----
+
+# Winners from Round 1: weight_decay + clip+warmup both helped individually.
+# Combine them and test with larger capacity.
+
+COMBINED = BASELINE_ARGS + [
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "10"),
+]
+
+COMBINED_LARGE = COMBINED + [
+    ("--atc_preset", "large"),
+]
+
+# Isolate what caused the ~45% failure in config 04
+AUG_ONLY = BASELINE_ARGS + [
+    ("--aug_noise_std", "0.05"),
+]
+
+LS_ONLY = BASELINE_ARGS + [
+    ("--label_smoothing", "0.05"),
+]
+
+# EEGConformer v2: remove label_smoothing, lower LR, plateau scheduler
+CONFORMER_ARGS_V2 = [
+    ("--dataset", "BCIC2A"),
+    ("--model", "EEGConformer"),
+    ("--fold", "1"),
+    ("--epochs", "500"),
+    ("--batch_size", "64"),
+    ("--lr", "2e-4"),
+    ("--device", "cuda"),
+    ("--amp",),
+    ("--weight_decay", "1e-4"),
+    ("--grad_clip_norm", "1.0"),
+    ("--warmup_epochs", "15"),
+    ("--mixup_alpha", "0.2"),
+    ("--scheduler", "plateau"),
+    ("--plateau_patience", "30"),
+    ("--plateau_factor", "0.8"),
+    ("--plateau_min_lr", "1e-5"),
+    ("--patience", "100"),
+    ("--conf_dim", "64"),
+    ("--conf_blocks", "4"),
+    ("--conf_heads", "4"),
+    ("--conf_kernel", "31"),
+    ("--conf_ff_expansion", "4"),
+    ("--conf_patch_kernel", "25"),
+    ("--conf_patch_stride", "10"),
+    ("--conf_dropout", "0.1"),
+]
+
+# Bonus: try the baseline recipe that works (from CLAUDE.md known result)
+# with more epochs and seed 42 to build the ensemble pool
+BASELINE_MORE_EPOCHS = [
+    ("--dataset", "BCIC2A"),
+    ("--model", "ATCNet"),
+    ("--fold", "1"),
+    ("--epochs", "300"),
+    ("--batch_size", "32"),
+    ("--lr", "1e-3"),
+    ("--device", "cuda"),
+    ("--amp",),
+    ("--mixup_alpha", "0.2"),
+    ("--scheduler", "plateau"),
+    ("--plateau_patience", "15"),
+    ("--plateau_factor", "0.9"),
+    ("--plateau_min_lr", "1e-4"),
+    ("--patience", "35"),
+    ("--seed", "42"),
+]
+
 SWEEP_CONFIGS = [
-    # (name, args_list, seeds)
-    ("01-baseline-original", BASELINE_ARGS, [21, 37]),
-    ("02-baseline-large", IMPROVE_LARGER, [37]),
-    ("03-weight-decay", IMPROVE_WD, [21, 37]),
-    ("04-aug-ls", IMPROVE_AUG, [21, 37]),
-    ("05-clip-warmup", IMPROVE_CLIP_WARMUP, [21, 37]),
-    ("06-full-combo", IMPROVE_FULL, [21, 37]),
-    ("07-eegconformer", CONFORMER_ARGS, [29, 43]),
+    # Round 1 (for reference — skip if already done)
+    # ("01-baseline-original", BASELINE_ARGS, [21, 37]),
+    # ("02-baseline-large", IMPROVE_LARGER, [37]),
+    # ("03-weight-decay", IMPROVE_WD, [21, 37]),
+    # ("04-aug-ls", IMPROVE_AUG, [21, 37]),
+    # ("05-clip-warmup", IMPROVE_CLIP_WARMUP, [21, 37]),
+    # ("06-full-combo", IMPROVE_FULL, [21, 37]),
+    # ("07-eegconformer", CONFORMER_ARGS, [29, 43]),
+
+    # Round 2 — build on what worked
+    ("08-combined-wd-clip-warmup", COMBINED, [21, 37, 42]),
+    ("09-combined-large", COMBINED_LARGE, [21, 37, 42]),
+    ("10-noise-only", AUG_ONLY, [21, 37]),
+    ("11-ls-only", LS_ONLY, [21, 37]),
+    ("12-eegconformer-v2", CONFORMER_ARGS_V2, [29, 43]),
+    ("13-baseline-seed42", BASELINE_MORE_EPOCHS, [42]),
 ]
 
 STOP_TARGET = 0.75  # stop sweep early if any run exceeds this
