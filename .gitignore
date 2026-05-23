@@ -1,23 +1,4 @@
-data/BCIC2A/test_x_only.h5
-data/BCIC2A/train.h5
-data/BCIC2A/val.h5
-data/CHINESE/test_x_only.h5
-data/CHINESE/train.h5
-data/CHINESE/val.h5
-data/MDD/test_x_only.h5
-data/MDD/train.h5
-data/MDD/val.h5
-data/SEED/SEED/sub_1.h5
-data/SEED/test_x_only.h5
-data/SEED/train.h5
-data/SEED/val.h5
-data/SLEEP/test_x_only.h5
-data/SLEEP/train.h5
-data/SLEEP/val.h5
-data/SEED/all.h5
-data/MDD/all.h5
-data/CHINESE/all.h5
-data/BCIC2A/all.h5
+data/*
 
 __pycache__
 .claude

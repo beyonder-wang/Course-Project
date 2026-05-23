@@ -83,6 +83,10 @@ class SEEDAsymNet(nn.Module):
         )
 
     def _extract_de_and_var(self, x):
+        if x.dim() == 3 and x.size(-1) == self.input_features:
+            de = x
+            var = torch.exp(2.0 * de).clamp_min(1e-6)
+            return de, var
         band_signals = self.decomp(x)
         de_features = []
         var_features = []

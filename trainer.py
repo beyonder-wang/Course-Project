@@ -16,7 +16,14 @@ class Trainer:
                  domain_head=None, domain_adv_weight=0.0,
                  domain_target_key=None, grad_clip_norm=0.0,
                  warmup_epochs=0,
-                 domain_adv_warmup_epochs=0):
+                 class_interp_prob=0.0,
+                 class_interp_alpha=0.0,
+                 prototype_interp_prob=0.0,
+                 prototype_interp_alpha=0.0,
+                 domain_adv_warmup_epochs=0,
+                 domain_adv_start_epoch=0,
+                 domain_adv_grl_schedule="none",
+                 domain_adv_grl_max=None):
         self.device = torch.device(device)
         self.model = model.to(self.device)
         self.emotion_head = emotion_head.to(self.device) if emotion_head is not None else None
@@ -34,11 +41,22 @@ class Trainer:
         self.scheduler = scheduler
         self.batch_transform = batch_transform
         self.mixup_alpha = float(max(0.0, mixup_alpha))
+        self.class_interp_prob = float(max(0.0, class_interp_prob))
+        self.class_interp_alpha = float(max(0.0, class_interp_alpha))
+        self.prototype_interp_prob = float(max(0.0, prototype_interp_prob))
+        self.prototype_interp_alpha = float(max(0.0, prototype_interp_alpha))
         self.emotion_dl_alpha = float(max(0.0, emotion_dl_alpha))
         self.emotion_aux_weight = float(max(0.0, emotion_aux_weight))
         self.domain_adv_weight = float(max(0.0, domain_adv_weight))
         self.domain_target_key = domain_target_key
         self.domain_adv_warmup_epochs = max(0, int(domain_adv_warmup_epochs))
+        self.domain_adv_start_epoch = max(0, int(domain_adv_start_epoch))
+        self.domain_adv_grl_schedule = str(domain_adv_grl_schedule or "none").lower()
+        if self.domain_adv_grl_schedule not in {"none", "dann"}:
+            raise ValueError(f"Unsupported domain_adv_grl_schedule: {self.domain_adv_grl_schedule!r}")
+        if domain_adv_grl_max is None:
+            domain_adv_grl_max = getattr(self.domain_head, "grl_lambda", 0.0)
+        self.domain_adv_grl_max = float(max(0.0, domain_adv_grl_max))
 
         self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
         self.optimizer = optimizer if optimizer is not None else torch.optim.Adam(
@@ -115,12 +133,110 @@ class Trainer:
         mixed = lam * data + (1.0 - lam) * data[index]
         return mixed, label, label[index], lam, index
 
+    def _class_interpolate(self, data, label, metadata):
+        if self.class_interp_prob <= 0 or self.class_interp_alpha <= 0 or data.size(0) < 2:
+            return data
+
+        mixed = data.clone()
+        subject_ids = None
+        if isinstance(metadata, dict):
+            subject_ids = metadata.get("subject_id")
+            if subject_ids is not None:
+                subject_ids = subject_ids.to(data.device)
+
+        for idx in range(data.size(0)):
+            if np.random.rand() > self.class_interp_prob:
+                continue
+
+            same_class = torch.nonzero(label == label[idx], as_tuple=False).flatten()
+            same_class = same_class[same_class != idx]
+            if same_class.numel() == 0:
+                continue
+
+            if subject_ids is not None:
+                cross_subject = same_class[subject_ids[same_class] != subject_ids[idx]]
+                if cross_subject.numel() > 0:
+                    same_class = cross_subject
+
+            partner_pos = torch.randint(same_class.numel(), (1,), device=data.device)
+            partner_idx = int(same_class[partner_pos].item())
+            lam = float(np.random.beta(self.class_interp_alpha, self.class_interp_alpha))
+            lam = min(0.8, max(0.2, lam))
+            mixed[idx] = lam * data[idx] + (1.0 - lam) * data[partner_idx]
+        return mixed
+
+    def _prototype_interpolate(self, data, label, metadata):
+        if self.prototype_interp_prob <= 0 or self.prototype_interp_alpha <= 0 or data.size(0) < 2:
+            return data
+
+        mixed = data.clone()
+        subject_ids = None
+        if isinstance(metadata, dict):
+            subject_ids = metadata.get("subject_id")
+            if subject_ids is not None:
+                subject_ids = subject_ids.to(data.device)
+
+        unique_labels = torch.unique(label)
+        class_prototypes = {}
+        class_subject_prototypes = {}
+        for cls in unique_labels.tolist():
+            cls_mask = label == cls
+            class_prototypes[int(cls)] = data[cls_mask].mean(dim=0)
+            if subject_ids is None:
+                continue
+
+            subject_proto = {}
+            cls_subjects = torch.unique(subject_ids[cls_mask])
+            for subject in cls_subjects.tolist():
+                mask = cls_mask & (subject_ids == subject)
+                subject_proto[int(subject)] = data[mask].mean(dim=0)
+            class_subject_prototypes[int(cls)] = subject_proto
+
+        for idx in range(data.size(0)):
+            if np.random.rand() > self.prototype_interp_prob:
+                continue
+
+            cls = int(label[idx].item())
+            prototype = class_prototypes.get(cls)
+            if prototype is None:
+                continue
+
+            if subject_ids is not None:
+                current_subject = int(subject_ids[idx].item())
+                other_subject_protos = [
+                    proto for subject, proto in class_subject_prototypes.get(cls, {}).items()
+                    if subject != current_subject
+                ]
+                if other_subject_protos:
+                    prototype = torch.stack(other_subject_protos, dim=0).mean(dim=0)
+
+            lam = float(np.random.beta(self.prototype_interp_alpha, self.prototype_interp_alpha))
+            lam = min(0.8, max(0.2, lam))
+            mixed[idx] = lam * data[idx] + (1.0 - lam) * prototype
+        return mixed
+
     def _get_effective_adv_weight(self, epoch):
-        """Return effective adversarial weight with linear warmup."""
-        if self.domain_adv_warmup_epochs <= 0 or self.domain_adv_weight <= 0:
+        """Return effective adversarial weight with optional delayed start/warmup."""
+        if self.domain_adv_weight <= 0 or epoch < self.domain_adv_start_epoch:
+            return 0.0
+        if self.domain_adv_warmup_epochs <= 0:
             return self.domain_adv_weight
-        warmup_frac = min(1.0, (epoch + 1) / max(1, self.domain_adv_warmup_epochs))
+        active_epoch = epoch - self.domain_adv_start_epoch
+        warmup_frac = min(1.0, (active_epoch + 1) / max(1, self.domain_adv_warmup_epochs))
         return warmup_frac * self.domain_adv_weight
+
+    def _get_effective_grl_lambda(self, epoch):
+        """Return effective GRL lambda with optional delayed DANN schedule."""
+        if self.domain_head is None or self.domain_adv_weight <= 0 or epoch < self.domain_adv_start_epoch:
+            return 0.0
+
+        if self.domain_adv_grl_schedule == "dann":
+            active_epochs = max(1, self.epochs - self.domain_adv_start_epoch)
+            progress = min(1.0, max(0.0, (epoch - self.domain_adv_start_epoch + 1) / active_epochs))
+            coeff = 2.0 / (1.0 + np.exp(-10.0 * progress)) - 1.0
+            return self.domain_adv_grl_max * float(coeff)
+
+        return self.domain_adv_grl_max
 
     def train(self):
         best_acc = 0.0
@@ -133,12 +249,17 @@ class Trainer:
             pending_steps = 0
             self.optimizer.zero_grad(set_to_none=True)
             effective_adv_weight = self._get_effective_adv_weight(epoch)
+            effective_grl_lambda = self._get_effective_grl_lambda(epoch)
+            if self.domain_head is not None:
+                self.domain_head.grl_lambda = effective_grl_lambda
 
             for batch in self.train_loader:
                 data, label, metadata = self._unpack_supervised_batch(batch)
                 data = data.to(self.device, non_blocking=True)
                 label = label.to(self.device, non_blocking=True)
                 domain_target = self._extract_domain_target(metadata)
+                data = self._class_interpolate(data, label, metadata)
+                data = self._prototype_interpolate(data, label, metadata)
                 if self.batch_transform is not None:
                     data = self.batch_transform(data)
                 data, label_a, label_b, lam, mix_index = self._mixup(data, label)
@@ -179,7 +300,7 @@ class Trainer:
                         loss = loss + aux_loss
                     if (
                         self.domain_head is not None
-                        and self.domain_adv_weight > 0
+                        and effective_adv_weight > 0
                         and features is not None
                         and domain_target is not None
                     ):
@@ -286,7 +407,9 @@ class Trainer:
                 f"Epoch [{epoch+1:02d}/{self.epochs}] | "
                 f"Train Loss: {epoch_train_loss:.4f} | "
                 f"Val Loss: {epoch_val_loss:.4f} | "
-                f"Val Acc: {epoch_val_acc:.4f}{marker}"
+                f"Val Acc: {epoch_val_acc:.4f}"
+                f"{' | AdvW: %.3f | GRL: %.3f' % (effective_adv_weight, effective_grl_lambda) if self.domain_head is not None else ''}"
+                f"{marker}"
             )
 
             if self.patience > 0 and no_improve >= self.patience:

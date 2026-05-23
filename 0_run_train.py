@@ -25,10 +25,10 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from torch.optim.lr_scheduler import CosineAnnealingLR, ReduceLROnPlateau
+from torch.optim.lr_scheduler import CosineAnnealingLR, CosineAnnealingWarmRestarts, ReduceLROnPlateau
 
 from model import (
-    MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose,
+    MODEL_DICT, GaussianNoise, ChannelDropout, TimeShift, Compose, AsymmetryJitter,
     EmotionDLHead, DomainAdversarialHead,
 )
 from utils import load_dataset_info, create_dataloaders, resolve_device, start_log, stop_log, write_summary_txt
@@ -55,9 +55,24 @@ def _write_supervised_summary(run_dir, config, metrics, fold_label):
             f"Scheduler: {config['scheduler']}",
             f"Label smoothing: {config.get('label_smoothing', 0.0)}",
             f"Mixup alpha: {config.get('mixup_alpha', 0.0)}",
+            f"Class interp prob: {config.get('class_interp_prob', 0.0)}",
+            f"Class interp alpha: {config.get('class_interp_alpha', 0.0)}",
+            f"Prototype interp prob: {config.get('prototype_interp_prob', 0.0)}",
+            f"Prototype interp alpha: {config.get('prototype_interp_alpha', 0.0)}",
+            f"DGCNN hidden_dim: {config.get('dgcnn_hidden_dim', 32)}",
+            f"DGCNN graph_layers: {config.get('dgcnn_graph_layers', 2)}",
+            f"DGCNN classifier_hidden: {config.get('dgcnn_classifier_hidden', 64)}",
+            f"DGCNN dropout: {config.get('dgcnn_dropout', 0.3)}",
+            f"DGCNN_RG top_k: {config.get('dgcnn_top_k', 12)}",
+            f"DGCNN_RG dropedge: {config.get('dgcnn_dropedge', 0.1)}",
+            f"DGCNN_RG dyn_alpha: {config.get('dgcnn_dyn_alpha', 0.2)}",
+            f"Asym jitter std: {config.get('asym_jitter_std', 0.0)}",
             f"EmotionDL alpha: {config.get('emotion_dl_alpha', 0.0)}",
             f"Subject adv weight: {config.get('subject_adv_weight', 0.0)}",
             f"Subject adv key: {config.get('subject_adv_key', 'subject_id')}",
+            f"Subject adv start epoch: {config.get('subject_adv_start_epoch', 0)}",
+            f"Subject adv GRL schedule: {config.get('subject_adv_grl_schedule', 'none')}",
+            f"Subject adv GRL max: {config.get('subject_adv_grl_max', config.get('subject_adv_grl_lambda', 1.0))}",
         ]),
         ("Results", [
             f"Best val accuracy: {metrics['best_val_accuracy']:.4f} (epoch {metrics['best_epoch']})",
@@ -115,7 +130,13 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     time_point_models = {"EEGNet", "EEGNet_SE", "EEGNet_SimAM", "EEGNet_SimAM_SE",
                          "EEGNet_KAN", "ShallowConvNet", "ATCNet", "FBCNet",
                          "EEGTCNet", "MICNN", "EEGConformer"}
-    if args.model in ("SimpleLinear", "SimpleMLP", "DENet"):
+    if args.model == "SimpleMLP":
+        hd = [int(x.strip()) for x in args.simplemlp_hidden_dims.split(",")]
+        model = model_cls(
+            input_channels=channels, time_points=time_points, num_classes=num_classes,
+            hidden_dims=tuple(hd), dropout=args.simplemlp_dropout,
+        )
+    elif args.model in ("SimpleLinear", "DENet"):
         model = model_cls(
             input_channels=channels, time_points=time_points, num_classes=num_classes
         )
@@ -190,13 +211,34 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     else:
         model = model_cls(chans=channels, num_classes=num_classes)
 
-    if args.model == "RGNN":
-        model.top_k = args.rgnn_top_k
-        model.dyn_alpha = args.rgnn_dyn_alpha
+    if hasattr(model, "return_features"):
         model.return_features = needs_features
-    elif args.model in ("DGCNN", "DGCNN_RG"):
-        if hasattr(model, "return_features"):
-            model.return_features = needs_features
+
+    if args.model in ("RGNN", "SOGNN"):
+        model.top_k = args.rgnn_top_k
+        if hasattr(model, "dyn_alpha"):
+            model.dyn_alpha = args.rgnn_dyn_alpha
+    elif args.model == "DGCNN":
+        model = model_cls(
+            chans=channels, num_classes=num_classes,
+            hidden_dim=args.dgcnn_hidden_dim,
+            graph_layers=args.dgcnn_graph_layers,
+            classifier_hidden=args.dgcnn_classifier_hidden,
+            dropout=args.dgcnn_dropout,
+            return_features=needs_features,
+        )
+    elif args.model == "DGCNN_RG":
+        model = model_cls(
+            chans=channels, num_classes=num_classes,
+            hidden_dim=args.dgcnn_hidden_dim,
+            graph_layers=args.dgcnn_graph_layers,
+            classifier_hidden=args.dgcnn_classifier_hidden,
+            dropout=args.dgcnn_dropout,
+            top_k=args.dgcnn_top_k,
+            dropedge=args.dgcnn_dropedge,
+            dyn_alpha=args.dgcnn_dyn_alpha,
+            return_features=needs_features,
+        )
 
     optimizer_cls = torch.optim.AdamW if args.weight_decay > 0 else torch.optim.Adam
     emotion_head = None
@@ -249,6 +291,11 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
     scheduler = None
     if args.scheduler == "cosine":
         scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
+    elif args.scheduler == "cosine_warm":
+        scheduler = CosineAnnealingWarmRestarts(
+            optimizer, T_0=args.coswarm_t0, T_mult=args.coswarm_tmult,
+            eta_min=args.coswarm_eta_min,
+        )
     elif args.scheduler == "plateau":
         scheduler = ReduceLROnPlateau(
             optimizer, mode="min", factor=args.plateau_factor,
@@ -263,6 +310,8 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         transforms.append(ChannelDropout(args.aug_channel_dropout))
     if args.aug_time_shift > 0:
         transforms.append(TimeShift(args.aug_time_shift))
+    if args.asym_jitter_std > 0:
+        transforms.append(AsymmetryJitter(args.asym_jitter_std, p=args.asym_jitter_prob))
     if transforms:
         batch_transform = Compose(*transforms)
 
@@ -278,6 +327,10 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         label_smoothing=args.label_smoothing,
         batch_transform=batch_transform,
         mixup_alpha=args.mixup_alpha,
+        class_interp_prob=args.class_interp_prob,
+        class_interp_alpha=args.class_interp_alpha,
+        prototype_interp_prob=args.prototype_interp_prob,
+        prototype_interp_alpha=args.prototype_interp_alpha,
         patience=args.patience,
         device=args.device,
         use_amp=args.amp,
@@ -288,6 +341,10 @@ def _train_fold(args, fold, run_dir, channels, num_classes, time_points):
         domain_head=domain_head,
         domain_adv_weight=args.subject_adv_weight,
         domain_target_key=args.subject_adv_key,
+        domain_adv_warmup_epochs=args.subject_adv_warmup_epochs,
+        domain_adv_start_epoch=args.subject_adv_start_epoch,
+        domain_adv_grl_schedule=args.subject_adv_grl_schedule,
+        domain_adv_grl_max=args.subject_adv_grl_max,
         grad_clip_norm=args.grad_clip_norm,
         warmup_epochs=args.warmup_epochs,
     )
@@ -322,7 +379,7 @@ def main():
         "--dataset",
         type=str,
         default="BCIC2A",
-        choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SEED_DE", "SEED_BYSUBJ", "SEED_SUB1_DE", "SEED_SUB1_DE_RANDOM", "SEED_SUB1_DE_TRIAL", "SEED_SUB1_DE_S23v1", "SEED_SUB1_DE_STRAT", "SLEEP"],
+        choices=["MDD", "BCIC2A", "CHINESE", "SEED", "SEED_DE", "SEED_DE_INIT", "SEED_BYSUBJ", "SEED_SUB1_DE", "SEED_SUB1_DE_RANDOM", "SEED_SUB1_DE_TRIAL", "SEED_SUB1_DE_S23v1", "SEED_SUB1_DE_STRAT", "SEED_SUB1FULL_AUG", "SEED_SUB1FULL_AUG_DE", "SLEEP"],
         help="Dataset name",
     )
     parser.add_argument(
@@ -362,23 +419,42 @@ def main():
     parser.add_argument("--label_smoothing", type=float, default=0.0,
                         help="Label smoothing factor for cross-entropy")
     parser.add_argument("--scheduler", type=str, default="none",
-                        choices=["none", "cosine", "plateau"], help="Learning-rate scheduler")
+                        choices=["none", "cosine", "cosine_warm", "plateau"],
+                        help="Learning-rate scheduler")
     parser.add_argument("--plateau_factor", type=float, default=0.9,
                         help="ReduceLROnPlateau factor")
     parser.add_argument("--plateau_patience", type=int, default=20,
                         help="ReduceLROnPlateau patience in epochs")
     parser.add_argument("--plateau_min_lr", type=float, default=1e-4,
                         help="ReduceLROnPlateau minimum learning rate")
+    parser.add_argument("--coswarm_t0", type=int, default=10,
+                        help="CosineAnnealingWarmRestarts T_0 (first restart length in epochs)")
+    parser.add_argument("--coswarm_tmult", type=int, default=1,
+                        help="CosineAnnealingWarmRestarts T_mult (multiplies T_0 each restart)")
+    parser.add_argument("--coswarm_eta_min", type=float, default=1e-6,
+                        help="CosineAnnealingWarmRestarts eta_min")
     parser.add_argument("--weight_decay", type=float, default=0.0,
                         help="Weight decay (uses AdamW when > 0)")
     parser.add_argument("--mixup_alpha", type=float, default=0.0,
                         help="Beta alpha for mixup (0 disables)")
+    parser.add_argument("--class_interp_prob", type=float, default=0.0,
+                        help="Per-sample probability of same-class DE interpolation augmentation")
+    parser.add_argument("--class_interp_alpha", type=float, default=0.0,
+                        help="Beta alpha for same-class DE interpolation; 0 disables")
+    parser.add_argument("--prototype_interp_prob", type=float, default=0.0,
+                        help="Per-sample probability of class-prototype DE interpolation augmentation")
+    parser.add_argument("--prototype_interp_alpha", type=float, default=0.0,
+                        help="Beta alpha for class-prototype interpolation; 0 disables")
     parser.add_argument("--aug_noise_std", type=float, default=0.0,
                         help="Gaussian noise std for supervised augmentation")
     parser.add_argument("--aug_channel_dropout", type=float, default=0.0,
                         help="Channel dropout probability for supervised augmentation")
     parser.add_argument("--aug_time_shift", type=int, default=0,
                         help="Max circular time shift in samples for augmentation")
+    parser.add_argument("--asym_jitter_std", type=float, default=0.0,
+                        help="Std of hemisphere-pair asymmetry jitter for DE+LDS inputs")
+    parser.add_argument("--asym_jitter_prob", type=float, default=1.0,
+                        help="Probability of applying asymmetry jitter per training batch")
     parser.add_argument("--emotion_dl_alpha", type=float, default=0.0,
                         help="Blend factor for EmotionDL soft targets (0 disables)")
     parser.add_argument("--emotion_aux_weight", type=float, default=1.0,
@@ -397,6 +473,15 @@ def main():
                         help="Dropout for the adversarial domain head")
     parser.add_argument("--subject_adv_grl_lambda", type=float, default=1.0,
                         help="Gradient-reversal strength for domain-adversarial training")
+    parser.add_argument("--subject_adv_warmup_epochs", type=int, default=0,
+                        help="Linearly ramp domain-adversarial weight from 0 to full over this many epochs")
+    parser.add_argument("--subject_adv_start_epoch", type=int, default=0,
+                        help="Keep adversarial loss fully off until this 0-based epoch index")
+    parser.add_argument("--subject_adv_grl_schedule", type=str, default="none",
+                        choices=["none", "dann"],
+                        help="Schedule for the GRL lambda after adversarial training starts")
+    parser.add_argument("--subject_adv_grl_max", type=float, default=None,
+                        help="Peak GRL lambda used by the schedule; defaults to --subject_adv_grl_lambda")
     parser.add_argument("--rgnn_top_k", type=int, default=8,
                         help="Top-k sparse neighbors retained by RGNN")
     parser.add_argument("--rgnn_dyn_alpha", type=float, default=0.15,
@@ -447,6 +532,24 @@ def main():
                         help="Top-k sparse neighbors retained by SEEDBandGraphNet")
     parser.add_argument("--bandgraph_dyn_alpha", type=float, default=0.2,
                         help="Weight of dynamic DE-similarity adjacency in SEEDBandGraphNet")
+    parser.add_argument("--dgcnn_hidden_dim", type=int, default=32,
+                        help="Graph hidden dimension for DGCNN / DGCNN_RG")
+    parser.add_argument("--dgcnn_graph_layers", type=int, default=2,
+                        help="Number of graph conv layers for DGCNN / DGCNN_RG")
+    parser.add_argument("--dgcnn_classifier_hidden", type=int, default=64,
+                        help="Classifier MLP hidden size for DGCNN / DGCNN_RG")
+    parser.add_argument("--dgcnn_dropout", type=float, default=0.3,
+                        help="Dropout for DGCNN / DGCNN_RG")
+    parser.add_argument("--dgcnn_top_k", type=int, default=12,
+                        help="Top-k sparse neighbors for DGCNN_RG")
+    parser.add_argument("--dgcnn_dropedge", type=float, default=0.1,
+                        help="Edge dropout for DGCNN_RG")
+    parser.add_argument("--dgcnn_dyn_alpha", type=float, default=0.2,
+                        help="Dynamic adjacency weight for DGCNN_RG")
+    parser.add_argument("--simplemlp_hidden_dims", type=str, default="256,128",
+                        help="Comma-separated hidden layer sizes for SimpleMLP")
+    parser.add_argument("--simplemlp_dropout", type=float, default=0.3,
+                        help="Dropout for SimpleMLP")
     parser.add_argument("--atc_preset", type=str, default=None,
                         choices=["base", "paper", "large", "xl"],
                         help="ATCNet capacity preset (overrides individual --atc_* args)")
@@ -579,9 +682,24 @@ def main():
                 f"Epochs: {config['epochs']}",
                 f"Label smoothing: {config.get('label_smoothing', 0.0)}",
                 f"Mixup alpha: {config.get('mixup_alpha', 0.0)}",
+                f"Class interp prob: {config.get('class_interp_prob', 0.0)}",
+                f"Class interp alpha: {config.get('class_interp_alpha', 0.0)}",
+                f"Prototype interp prob: {config.get('prototype_interp_prob', 0.0)}",
+                f"Prototype interp alpha: {config.get('prototype_interp_alpha', 0.0)}",
+                f"DGCNN hidden_dim: {config.get('dgcnn_hidden_dim', 32)}",
+                f"DGCNN graph_layers: {config.get('dgcnn_graph_layers', 2)}",
+                f"DGCNN classifier_hidden: {config.get('dgcnn_classifier_hidden', 64)}",
+                f"DGCNN dropout: {config.get('dgcnn_dropout', 0.3)}",
+                f"DGCNN_RG top_k: {config.get('dgcnn_top_k', 12)}",
+                f"DGCNN_RG dropedge: {config.get('dgcnn_dropedge', 0.1)}",
+                f"DGCNN_RG dyn_alpha: {config.get('dgcnn_dyn_alpha', 0.2)}",
+                f"Asym jitter std: {config.get('asym_jitter_std', 0.0)}",
                 f"EmotionDL alpha: {config.get('emotion_dl_alpha', 0.0)}",
                 f"Subject adv weight: {config.get('subject_adv_weight', 0.0)}",
                 f"Subject adv key: {config.get('subject_adv_key', 'subject_id')}",
+                f"Subject adv start epoch: {config.get('subject_adv_start_epoch', 0)}",
+                f"Subject adv GRL schedule: {config.get('subject_adv_grl_schedule', 'none')}",
+                f"Subject adv GRL max: {config.get('subject_adv_grl_max', config.get('subject_adv_grl_lambda', 1.0))}",
             ]),
             ("Cross-Validation Results", [
                 f"Mean final val accuracy: {cv_summary['mean_final_val_accuracy']:.4f}",
