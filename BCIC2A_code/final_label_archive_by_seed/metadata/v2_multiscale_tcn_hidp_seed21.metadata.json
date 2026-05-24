@@ -1,0 +1,8 @@
+{
+  "run": "v2_multiscale_tcn_hidp_seed21",
+  "model_key": "multiscale_tcn_hidp",
+  "seed": 21,
+  "val_accuracy_recomputed": 0.6472222208976746,
+  "val_loss_recomputed": 0.9329894344011943,
+  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v2_results\\v2_multiscale_tcn_hidp_seed21"
+}

@@ -1,0 +1,9 @@
+﻿{
+    "created_at":  "2026-05-24T21:07:45",
+    "root":  "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\final_label_archive_by_seed",
+    "single_seed_txt_count":  45,
+    "fused_candidate_txt_count":  6,
+    "manifest":  "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\final_label_archive_by_seed\\manifest.csv",
+    "formal_submission_hash":  "BA9655F799146D0C63B0DB471C14A5E1E63D1AF4AE8CEA22E6D1A56523EE408A",
+    "note":  "single_seed_txt contains exported per-run labels already present as txt; logits-only final shadow seeds are listed in manifest."
+}

@@ -1,8 +1,0 @@
-{
-  "run": "v4_atc_adamw_wd1e4_clip_seed21",
-  "model_key": "atcnet_paper",
-  "seed": 21,
-  "val_accuracy_recomputed": 0.6833333373069763,
-  "val_loss_recomputed": 0.8844327913390265,
-  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v4_results\\v4_atc_adamw_wd1e4_clip_seed21"
-}

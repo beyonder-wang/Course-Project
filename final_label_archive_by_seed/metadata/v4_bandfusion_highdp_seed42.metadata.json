@@ -1,8 +1,0 @@
-{
-  "run": "v4_bandfusion_highdp_seed42",
-  "model_key": "bandfusion_eegnet_highdp",
-  "seed": 42,
-  "val_accuracy_recomputed": 0.6527777910232544,
-  "val_loss_recomputed": 0.9095087687174479,
-  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v4_results\\v4_bandfusion_highdp_seed42"
-}

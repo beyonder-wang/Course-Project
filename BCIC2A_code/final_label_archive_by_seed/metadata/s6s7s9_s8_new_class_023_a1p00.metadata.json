@@ -1,0 +1,211 @@
+{
+  "name": "s6s7s9_s8_new_class_023_a1p00",
+  "base_variant": "s6s7s9",
+  "base_patches": [
+    {
+      "subject": 7,
+      "source": "leave_s7_out_triple/bandfusion+fbcsp_riemann+tcn/0.33_0.33_0.33",
+      "mode": "full"
+    },
+    {
+      "subject": 9,
+      "source": "leave_s9_out_triple/atc+fbcsp_riemann+tcn/0.40_0.40_0.20",
+      "mode": "full"
+    },
+    {
+      "subject": 6,
+      "source": "subject6_atc/s6_atc_chz_lr0p0015_ema0997_w1p75_seed37#target_best",
+      "mode": "full"
+    }
+  ],
+  "conditional_patch": {
+    "subject": 8,
+    "source": "subject8_atc/s8_atc_chz_lr0p0015_ema0997_w1p75_seed2026#target_best",
+    "mode": "new_class",
+    "classes": [
+      0,
+      2,
+      3
+    ],
+    "alpha": 1.0
+  },
+  "acc": 0.8083333373069763,
+  "subject_acc": {
+    "1": 0.8500000238418579,
+    "2": 0.574999988079071,
+    "3": 0.8999999761581421,
+    "4": 0.7250000238418579,
+    "5": 0.7250000238418579,
+    "6": 0.824999988079071,
+    "7": 0.9750000238418579,
+    "8": 0.824999988079071,
+    "9": 0.875
+  },
+  "pred_counts": [
+    90,
+    98,
+    93,
+    79
+  ],
+  "confusion": [
+    [
+      77,
+      9,
+      3,
+      1
+    ],
+    [
+      5,
+      73,
+      8,
+      4
+    ],
+    [
+      6,
+      9,
+      71,
+      4
+    ],
+    [
+      2,
+      7,
+      11,
+      70
+    ]
+  ],
+  "test_counts": [
+    88,
+    95,
+    94,
+    83
+  ],
+  "diff_vs_current_highest_nonquota": 43,
+  "fixed_holdout": {
+    "delta": {
+      "mean": 0.06115972623229027,
+      "std": 0.013555574230849743,
+      "p05": 0.03888887166976929,
+      "p50": 0.06111109256744385,
+      "p95": 0.08333331346511841
+    },
+    "beats_baseline_rate": 1.0,
+    "ties_baseline_rate": 0.0,
+    "subject_delta": {
+      "1": {
+        "mean": 0.0,
+        "std": 0.0,
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "2": {
+        "mean": 0.0,
+        "std": 0.0,
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "3": {
+        "mean": 0.0,
+        "std": 0.0,
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "4": {
+        "mean": 0.0,
+        "std": 0.0,
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "5": {
+        "mean": 0.0,
+        "std": 0.0,
+        "p05": 0.0,
+        "p50": 0.0,
+        "p95": 0.0
+      },
+      "6": {
+        "mean": 0.12650001049041748,
+        "std": 0.06115492433309555,
+        "p05": 0.0,
+        "p50": 0.1499999761581421,
+        "p95": 0.25
+      },
+      "7": {
+        "mean": 0.20149999856948853,
+        "std": 0.06292018294334412,
+        "p05": 0.09999996423721313,
+        "p50": 0.19999998807907104,
+        "p95": 0.30000001192092896
+      },
+      "8": {
+        "mean": 0.07562500238418579,
+        "std": 0.054917026311159134,
+        "p05": 0.0,
+        "p50": 0.09999996423721313,
+        "p95": 0.15000003576278687
+      },
+      "9": {
+        "mean": 0.14681249856948853,
+        "std": 0.06850241869688034,
+        "p05": 0.04999995231628418,
+        "p50": 0.1499999761581421,
+        "p95": 0.25
+      }
+    },
+    "n_splits": 800
+  },
+  "diff_vs_references": {
+    "experiments\\final_candidate_backups\\current_highest_nonquota\\BCIC2A.txt": {
+      "diff_count": 43,
+      "diff_rate": 0.11944444477558136,
+      "new_counts": [
+        88,
+        95,
+        94,
+        83
+      ],
+      "ref_counts": [
+        76,
+        106,
+        87,
+        91
+      ]
+    },
+    "experiments\\final_candidate_backups\\late_three_hour_fusion_best\\BCIC2A.txt": {
+      "diff_count": 38,
+      "diff_rate": 0.10555555671453476,
+      "new_counts": [
+        88,
+        95,
+        94,
+        83
+      ],
+      "ref_counts": [
+        78,
+        104,
+        83,
+        95
+      ]
+    },
+    "course_project\\BCIC2A\\BCIC2A.txt": {
+      "diff_count": 95,
+      "diff_rate": 0.2638888955116272,
+      "new_counts": [
+        88,
+        95,
+        94,
+        83
+      ],
+      "ref_counts": [
+        81,
+        112,
+        89,
+        78
+      ]
+    }
+  },
+  "backup_txt": "experiments\\final_candidate_backups\\class_conditional_subject_patch\\s6s7s9_s8_new_class_023_a1p00\\BCIC2A.txt"
+}

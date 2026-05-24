@@ -1,8 +1,0 @@
-{
-  "run": "v3_eegnet_serious_long_seed4",
-  "model_key": "eegnet_serious",
-  "seed": 4,
-  "val_accuracy_recomputed": 0.6722221970558167,
-  "val_loss_recomputed": 0.8429862499237061,
-  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v3_results\\v3_eegnet_serious_long_seed4"
-}

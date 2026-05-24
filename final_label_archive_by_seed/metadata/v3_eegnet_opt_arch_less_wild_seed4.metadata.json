@@ -1,8 +1,0 @@
-{
-  "run": "v3_eegnet_opt_arch_less_wild_seed4",
-  "model_key": "eegnet_opt_arch_less_wild",
-  "seed": 4,
-  "val_accuracy_recomputed": 0.6916666626930237,
-  "val_loss_recomputed": 1.0715965323978,
-  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v3_results\\v3_eegnet_opt_arch_less_wild_seed4"
-}

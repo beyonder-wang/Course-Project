@@ -1,0 +1,8 @@
+{
+  "run": "v2_multiscale_lowdp_seed2026",
+  "model_key": "multiscale_eegnet_lowdp",
+  "seed": 2026,
+  "val_accuracy_recomputed": 0.6277777552604675,
+  "val_loss_recomputed": 1.3215066141552396,
+  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v2_results\\v2_multiscale_lowdp_seed2026"
+}

@@ -1,8 +1,0 @@
-{
-  "run": "v2_eegnet_wide_seed7",
-  "model_key": "eegnet_wide",
-  "seed": 7,
-  "val_accuracy_recomputed": 0.6555555462837219,
-  "val_loss_recomputed": 0.9993381606207954,
-  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v2_results\\v2_eegnet_wide_seed7"
-}
