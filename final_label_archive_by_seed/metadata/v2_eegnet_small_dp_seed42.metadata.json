@@ -1,0 +1,8 @@
+{
+  "run": "v2_eegnet_small_dp_seed42",
+  "model_key": "eegnet_serious_small_dp",
+  "seed": 42,
+  "val_accuracy_recomputed": 0.625,
+  "val_loss_recomputed": 1.0066094636917113,
+  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_v2_results\\v2_eegnet_small_dp_seed42"
+}

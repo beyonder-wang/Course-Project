@@ -1,0 +1,8 @@
+{
+  "run": "p1_eegnet_se_seed2026",
+  "model_key": "eegnet_se",
+  "seed": 2026,
+  "val_accuracy_recomputed": 0.6277777552604675,
+  "val_loss_recomputed": 1.0023294157452054,
+  "source": "C:\\Users\\48698\\Desktop\\-2026-\\experiments\\night_sweep_results\\p1_eegnet_se_seed2026"
+}
