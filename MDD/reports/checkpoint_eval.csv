@@ -1,0 +1,13 @@
+checkpoint,model,loaded,acc,bal_acc,f1,cm,note
+best_model.pth,EEGNetOld,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+best_model_fold_1.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+best_model_fold_2.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+best_model_fold_3.pth,EEGNet,True,0.5015625,0.5015625,0.33679618242003123,"[[1, 319], [0, 320]]",
+best_model_fold_4.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+best_model_fold_5.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+ensemble_model_seed_123.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+ensemble_model_seed_2024.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+ensemble_model_seed_42.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+hybrid_best_model.pth,EEGNetHybrid,True,0.5,0.5,0.3441278950604632,"[[4, 316], [4, 316]]",
+ultimate_best_model.pth,EEGNet,True,0.5,0.5,0.3333333333333333,"[[0, 320], [0, 320]]",
+outputs\eegnet_seed42_best.pth,EEGNet,True,0.9296875,0.9296875,0.9295428357540751,"[[283, 37], [8, 312]]",

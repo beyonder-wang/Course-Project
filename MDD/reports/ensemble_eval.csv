@@ -1,0 +1,38 @@
+strategy,acc,bal_acc,f1,cm,description
+threshold-tuned top-3 weighted (t=0.61),0.95625,0.95625,0.9562393162393162,"[[301, 19], [9, 311]]",threshold=0.61
+top-2 average,0.9484375,0.9484375,0.9483314128863218,"[[289, 31], [2, 318]]",hybrid_best_mod+ensemble_model_
+acc>=0.93 (2 models),0.9484375,0.9484375,0.9483314128863218,"[[289, 31], [2, 318]]",hybrid_best_mod+ensemble_model_
+best exhaustive combo,0.9484375,0.9484375,0.9483314128863218,"[[289, 31], [2, 318]]",hybrid_best_model.pt+ensemble_model_seed_
+top-4 average,0.946875,0.946875,0.9467871780575363,"[[290, 30], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b
+top-5 average,0.9421875,0.9421875,0.9420685538422395,"[[287, 33], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_
+weighted top-5,0.9421875,0.9421875,0.9420685538422395,"[[287, 33], [4, 316]]",hybrid_best_*0.202+ensemble_mod*0.201+ensemble_mod*0.200+eegnet_seed4*0.200+ensemble_mod*0.199
+weighted(acc-0.5) top-5,0.9421875,0.9421875,0.9420685538422395,"[[287, 33], [4, 316]]",hybrid_best_*0.203+ensemble_mod*0.201+ensemble_mod*0.199+eegnet_seed4*0.199+ensemble_mod*0.198
+seed+hybrid (5 models),0.9421875,0.9421875,0.9420685538422395,"[[287, 33], [4, 316]]",hybrid_best_model.pth+ensemble_model_seed_123.pth+ensemble_model_seed_42.pth+eegnet_seed42_best.pth+ensemble_model_seed_2024.pth
+seed+hybrid weighted (5 models),0.9421875,0.9421875,0.9420685538422395,"[[287, 33], [4, 316]]",hybrid_best_model.pth+ensemble_model_seed_123.pth+ensemble_model_seed_42.pth+eegnet_seed42_best.pth+ensemble_model_seed_2024.pth
+top-3 average,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_
+top-8 average,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m+best_model_fold+best_model_fold
+acc>=0.91 (8 models),0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m+best_model_fold+best_model_fold
+weighted top-3,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_*0.335+ensemble_mod*0.333+ensemble_mod*0.332
+weighted top-8,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_*0.127+ensemble_mod*0.126+ensemble_mod*0.125+eegnet_seed4*0.125+ensemble_mod*0.125+ultimate_bes*0.124+best_model_f*0.124+best_model_f*0.124
+weighted(acc-0.5) top-3,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_*0.337+ensemble_mod*0.333+ensemble_mod*0.330
+weighted(acc-0.5) top-8,0.940625,0.940625,0.9404942500611695,"[[286, 34], [4, 316]]",hybrid_best_*0.129+ensemble_mod*0.127+ensemble_mod*0.126+eegnet_seed4*0.126+ensemble_mod*0.125+ultimate_bes*0.123+best_model_f*0.122+best_model_f*0.122
+top-6 average,0.9390625,0.9390624999999999,0.9389538509701103,"[[287, 33], [6, 314]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m
+acc>=0.92 (6 models),0.9390625,0.9390624999999999,0.9389538509701103,"[[287, 33], [6, 314]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m
+single: hybrid_best_model.pth,0.9390625,0.9390625,0.9388797061524334,"[[283, 37], [2, 318]]",hybrid_best_model.pth
+top-10 average,0.9375,0.9375,0.93734335839599,"[[284, 36], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m+best_model_fold+best_model_fold+best_model_fold+best_model.pth
+acc>=0.90 (10 models),0.9375,0.9375,0.93734335839599,"[[284, 36], [4, 316]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m+best_model_fold+best_model_fold+best_model_fold+best_model.pth
+single: ensemble_model_seed_123.pth,0.934375,0.934375,0.9342304869097138,"[[284, 36], [6, 314]]",ensemble_model_seed_123.pth
+top-12 average,0.9328125,0.9328125,0.9326333929808499,"[[282, 38], [5, 315]]",hybrid_best_mod+ensemble_model_+ensemble_model_+eegnet_seed42_b+ensemble_model_+ultimate_best_m+best_model_fold+best_model_fold+best_model_fold+best_model.pth+best_model_fold+best_model_fold
+weighted top-12,0.9328125,0.9328125,0.9326333929808499,"[[282, 38], [5, 315]]",hybrid_best_*0.085+ensemble_mod*0.085+ensemble_mod*0.085+eegnet_seed4*0.085+ensemble_mod*0.084+ultimate_bes*0.084+best_model_f*0.083+best_model_f*0.083+best_model_f*0.082+best_model.p*0.082+best_model_f*0.082+best_model_f*0.080
+single: eegnet_seed42_best.pth,0.9296875,0.9296875,0.9295428357540751,"[[283, 37], [8, 312]]",eegnet_seed42_best.pth
+single: ensemble_model_seed_42.pth,0.9296875,0.9296875,0.9295221454633551,"[[282, 38], [7, 313]]",ensemble_model_seed_42.pth
+single: ensemble_model_seed_2024.pth,0.9265625,0.9265625,0.9263422099785736,"[[279, 41], [6, 314]]",ensemble_model_seed_2024.pth
+seed ensemble (3 models),0.9265625,0.9265625,0.9263422099785736,"[[279, 41], [6, 314]]",ensemble_model_seed_123.pth+ensemble_model_seed_42.pth+ensemble_model_seed_2024.pth
+single: ultimate_best_model.pth,0.9203125,0.9203125000000001,0.9201000707447291,"[[278, 42], [9, 311]]",ultimate_best_model.pth
+fold ensemble (5 models),0.91875,0.91875,0.9184921039225675,"[[276, 44], [8, 312]]",best_model_fold_1.pth+best_model_fold_2.pth+best_model_fold_3.pth+best_model_fold_4.pth+best_model_fold_5.pth
+single: best_model_fold_2.pth,0.915625,0.915625,0.9152941176470588,"[[273, 47], [7, 313]]",best_model_fold_2.pth
+single: best_model_fold_1.pth,0.915625,0.915625,0.9151068533529845,"[[268, 52], [2, 318]]",best_model_fold_1.pth
+single: best_model_fold_3.pth,0.9046875,0.9046875000000001,0.9045642443487805,"[[278, 42], [19, 301]]",best_model_fold_3.pth
+single: best_model.pth,0.903125,0.903125,0.9030103931403318,"[[278, 42], [20, 300]]",best_model.pth
+single: best_model_fold_4.pth,0.896875,0.8968750000000001,0.8962916404776871,"[[263, 57], [9, 311]]",best_model_fold_4.pth
+single: best_model_fold_5.pth,0.8828125,0.8828125,0.8824195124819036,"[[264, 56], [19, 301]]",best_model_fold_5.pth

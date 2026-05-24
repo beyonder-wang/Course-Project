@@ -1,0 +1,184 @@
+=== Dataset Info ===
+{
+  "dataset": {
+    "name": "MDD_2Class",
+    "task_type": "resting_state",
+    "downstream_task": "classification",
+    "num_labels": 2,
+    "category_list": [
+      "Healthy Controls",
+      "Major Depressive Disorder"
+    ],
+    "session_list": [
+      "1:eyes closed",
+      "2:eyes opened",
+      "P300 task data"
+    ],
+    "original_sampling_rate": 256.0,
+    "channels": [
+      "Fp1",
+      "F3",
+      "C3",
+      "P3",
+      "O1",
+      "F7",
+      "T3",
+      "T5",
+      "Fz",
+      "Fp2",
+      "F4",
+      "C4",
+      "P4",
+      "O2",
+      "F8",
+      "T4",
+      "T6",
+      "Cz",
+      "Pz",
+      "A2-A1"
+    ],
+    "montage": "10_20"
+  },
+  "processing": {
+    "target_sampling_rate": 200.0,
+    "window_sec": 1.0,
+    "stride_sec": 1.0,
+    "filter_low": 0.1,
+    "filter_high": 75.0,
+    "filter_notch": 50.0,
+    "max_amplitude_uv": 600.0
+  },
+  "statistics": {
+    "total_subjects": 64,
+    "successful": 64,
+    "failed": 0,
+    "failed_subject_ids": [],
+    "total_segments": 71899,
+    "valid_segments": 71428,
+    "rejected_segments": 471
+  },
+  "generated_at": "2026-01-26T14:42:20.069425"
+}
+
+=== train.h5 ===
+  Keys: ['X', 'y']
+  X:
+    shape: (960, 20, 200)
+    dtype: float32
+    min: -507.357697
+    max: 475.804199
+    mean: 0.059702
+    std: 14.632079
+    has_nan: False
+    has_inf: False
+    Per-channel stats (mean / std):
+      ch00: mean=0.1746, std=26.4193
+      ch01: mean=0.0817, std=13.8359
+      ch02: mean=0.0798, std=11.8471
+      ch03: mean=0.0359, std=10.9650
+      ch04: mean=0.0556, std=12.1135
+      ch05: mean=0.1842, std=14.9703
+      ch06: mean=0.0753, std=12.2785
+      ch07: mean=0.0400, std=10.4580
+      ch08: mean=0.0578, std=14.1252
+      ch09: mean=0.0569, std=25.2656
+      ch10: mean=0.0860, std=16.2993
+      ch11: mean=0.0744, std=10.9623
+      ch12: mean=0.0323, std=11.7093
+      ch13: mean=0.0520, std=11.3977
+      ch14: mean=0.0672, std=18.1748
+      ch15: mean=0.0151, std=11.0134
+      ch16: mean=0.0247, std=10.8630
+      ch17: mean=0.0437, std=11.1313
+      ch18: mean=0.0091, std=11.6383
+      ch19: mean=-0.0524, std=13.4617
+  y:
+    shape: (960,)
+    dtype: int64
+    min: 0.000000
+    max: 1.000000
+    mean: 0.500000
+    std: 0.500000
+    has_nan: False
+    has_inf: False
+    Label distribution:
+      class 0: 480 (50.0%)
+      class 1: 480 (50.0%)
+
+=== val.h5 ===
+  Keys: ['X', 'y']
+  X:
+    shape: (640, 20, 200)
+    dtype: float32
+    min: -514.363647
+    max: 467.881958
+    mean: 0.013450
+    std: 13.953103
+    has_nan: False
+    has_inf: False
+    Per-channel stats (mean / std):
+      ch00: mean=-0.1206, std=23.5560
+      ch01: mean=-0.1124, std=12.9215
+      ch02: mean=0.0427, std=12.0518
+      ch03: mean=0.0430, std=11.5316
+      ch04: mean=0.1674, std=13.2945
+      ch05: mean=-0.1223, std=13.2964
+      ch06: mean=0.0635, std=11.9825
+      ch07: mean=0.0581, std=11.4624
+      ch08: mean=-0.0572, std=13.5615
+      ch09: mean=-0.1867, std=22.5849
+      ch10: mean=-0.0103, std=13.8039
+      ch11: mean=-0.0266, std=10.7590
+      ch12: mean=0.1022, std=12.2763
+      ch13: mean=0.1069, std=12.3801
+      ch14: mean=0.0710, std=15.7326
+      ch15: mean=0.0222, std=10.1998
+      ch16: mean=0.1095, std=11.8696
+      ch17: mean=-0.0574, std=11.4755
+      ch18: mean=0.1390, std=12.3068
+      ch19: mean=0.0370, std=13.6076
+  y:
+    shape: (640,)
+    dtype: int64
+    min: 0.000000
+    max: 1.000000
+    mean: 0.500000
+    std: 0.500000
+    has_nan: False
+    has_inf: False
+    Label distribution:
+      class 0: 320 (50.0%)
+      class 1: 320 (50.0%)
+
+=== test_x_only.h5 ===
+  Keys: ['X']
+  X:
+    shape: (800, 20, 200)
+    dtype: float32
+    min: -583.813049
+    max: 587.958191
+    mean: 0.008525
+    std: 12.768129
+    has_nan: False
+    has_inf: False
+    Per-channel stats (mean / std):
+      ch00: mean=-0.1960, std=23.2686
+      ch01: mean=0.0364, std=11.0553
+      ch02: mean=-0.0148, std=10.4733
+      ch03: mean=0.0527, std=9.3488
+      ch04: mean=0.0187, std=10.8707
+      ch05: mean=-0.0530, std=12.5991
+      ch06: mean=-0.0594, std=10.3032
+      ch07: mean=0.0091, std=9.4210
+      ch08: mean=0.0386, std=11.6437
+      ch09: mean=0.1039, std=21.5647
+      ch10: mean=0.0403, std=12.0424
+      ch11: mean=0.0603, std=9.3249
+      ch12: mean=0.0536, std=10.6467
+      ch13: mean=0.0636, std=10.1302
+      ch14: mean=-0.1383, std=19.2229
+      ch15: mean=0.0267, std=9.0671
+      ch16: mean=0.0415, std=10.3884
+      ch17: mean=0.0636, std=9.6429
+      ch18: mean=0.0275, std=10.7050
+      ch19: mean=-0.0045, std=10.5854

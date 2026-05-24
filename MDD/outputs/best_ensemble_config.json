@@ -1,0 +1,35 @@
+{
+  "strategy": "threshold-tuned top-3 weighted (t=0.61)",
+  "acc": 0.95625,
+  "bal_acc": 0.95625,
+  "f1": 0.9562393162393162,
+  "cm": [
+    [
+      301,
+      19
+    ],
+    [
+      9,
+      311
+    ]
+  ],
+  "type": "threshold_ensemble",
+  "threshold": 0.6100000000000003,
+  "models": [
+    {
+      "pth": "hybrid_best_model.pth",
+      "mode": "raw",
+      "weight": 0.3350055741360089
+    },
+    {
+      "pth": "ensemble_model_seed_123.pth",
+      "mode": "raw",
+      "weight": 0.3333333333333333
+    },
+    {
+      "pth": "ensemble_model_seed_42.pth",
+      "mode": "raw",
+      "weight": 0.33166109253065773
+    }
+  ]
+}
